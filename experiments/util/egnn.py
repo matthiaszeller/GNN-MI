@@ -3,15 +3,19 @@ import torch
 import torch.nn.functional as F
 
 
+
 class E_GCL(nn.Module):
     """
     E(n) Equivariant Convolutional Layer
-    re
+    Taken from ???TODO:add link/paper ref
     """
+
+    #   question: difference between output dim and hidden dim?
 
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0, act_fn=nn.SiLU(), residual=True, attention=False, normalize=False, coords_agg='mean', tanh=False):
         super(E_GCL, self).__init__()
         input_edge = input_nf * 2
+        self.input_nf = input_nf
         self.residual = residual
         self.attention = attention
         self.normalize = normalize
@@ -20,54 +24,34 @@ class E_GCL(nn.Module):
         self.epsilon = 1e-8
         edge_coords_nf = 1
 
-        
-        
         self.edge_mlp = nn.Sequential( # this can be changed easily
-            nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
+            nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf), #input is dim of h_i+dim h_j +1
+            nn.BatchNorm1d(hidden_nf),
             act_fn,
-            nn.Linear(hidden_nf, hidden_nf),
-            act_fn)
-        
-        #nn.Sequential(nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
-        #        act_fn) 
-        
-        
-        #nn.Sequential( # this can be changed easily
-        #    nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
-        #    act_fn,
-        #    nn.Linear(hidden_nf, hidden_nf),
-        #    act_fn)
-
+            nn.Linear(hidden_nf, hidden_nf))
+            #act_fn,
+            #nn.Linear(hidden_nf, hidden_nf)) # result is dim of m_i
+            
         #self.edge_mlp = nn.Sequential( # as in noPhys GNN. Same edge function
-        #    nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
-        #    nn.BatchNorm1d(hidden_nf),
-        #    nn.ReLU(),
-        #    nn.Linear(hidden_nf, hidden_nf)
-        #)
+            #nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
+            #nn.BatchNorm1d(hidden_nf),
+            #nn.ReLU(),
+            #nn.Linear(hidden_nf, hidden_nf))
 
-        self.node_mlp = nn.Sequential( # this can be changed easily
-            nn.Linear(hidden_nf + input_nf, hidden_nf),
-        #    nn.ReLU(),
-            act_fn,
-            nn.Linear(hidden_nf, output_nf))
-        
-        #nn.Sequential(
-        #        nn.Linear(hidden_nf + input_nf, hidden_nf),
-        #        act_fn)
-        
-        #nn.Sequential( #NoPhys imitation
-        #    nn.Linear(hidden_nf + input_nf, hidden_nf),
+        #self.node_mlp = nn.Sequential( # this can be changed easily
+        #    nn.Linear(hidden_nf + input_nf, hidden_nf), #input is dim of h_i + m_i
         #    nn.BatchNorm1d(hidden_nf),
-        #    nn.ReLU(),
-        #    nn.Linear(hidden_nf, output_nf)
-        #)
-        
-        
-        #nn.Sequential( # this can be changed easily
-        #    nn.Linear(hidden_nf + input_nf, hidden_nf),
-        #    nn.ReLU(),
-        #    #act_fn,
+        #    act_fn,
         #    nn.Linear(hidden_nf, output_nf))
+            #act_fn)
+        #    nn.Linear(hidden_nf, output_nf),
+        #    act_fn) # result is dim of h
+
+        self.node_mlp = nn.Sequential(
+            nn.Linear(hidden_nf + input_nf, hidden_nf),
+            nn.BatchNorm1d(hidden_nf),
+            nn.ReLU(),
+            nn.Linear(hidden_nf, output_nf))
 
         layer = nn.Linear(hidden_nf, 1, bias=False)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
@@ -87,7 +71,10 @@ class E_GCL(nn.Module):
 
     def edge_model(self, source, target, radial, edge_attr):
         if edge_attr is None:  # Unused.
-            out = torch.cat([source, target, radial], dim=1)
+            if self.input_nf==0:
+                out = radial
+            else:
+                out = torch.cat([source, target, radial], dim=1)
         else:
             out = torch.cat([source, target, radial, edge_attr], dim=1)
         out = self.edge_mlp(out)
@@ -96,15 +83,21 @@ class E_GCL(nn.Module):
             out = out * att_val
         return out
 
-    def node_model(self, x, edge_index, edge_attr, node_attr):
+    def node_model(self, x, edge_index, edge_attr, node_attr, num_nodes):
         row, col = edge_index
-        agg = unsorted_segment_sum(edge_attr, row, num_segments=x.size(0))
+        if self.input_nf==0:
+            agg = unsorted_segment_sum(edge_attr, row, num_segments=num_nodes)
+        else:
+            agg = unsorted_segment_sum(edge_attr, row, num_segments=x.size(0))
         if node_attr is not None:
             agg = torch.cat([x, agg, node_attr], dim=1)
         else:
-            agg = torch.cat([x, agg], dim=1)
+            if self.input_nf==0:
+                agg = agg
+            else:
+                agg = torch.cat([x, agg], dim=1)
         out = self.node_mlp(agg)
-        if self.residual:
+        if self.residual and self.input_nf !=0:
             out = x + out
         return out, agg
 
@@ -134,10 +127,13 @@ class E_GCL(nn.Module):
     def forward(self, h, edge_index, coord, edge_attr=None, node_attr=None):
         row, col = edge_index
         radial, coord_diff = self.coord2radial(edge_index, coord)
-
-        edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
+        
+        if self.input_nf == 0:
+            edge_feat = self.edge_model(None, None, radial, edge_attr)
+        else:
+            edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
-        h, agg = self.node_model(h, edge_index, edge_feat, node_attr)
+        h, agg = self.node_model(h, edge_index, edge_feat, node_attr, coord.size(0))
 
         return h, coord, edge_attr
 

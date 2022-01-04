@@ -2,41 +2,55 @@
 
 
 model:
-  - 'Equiv'
+        #  - 'NoPhysicsGnn'
+    - 'Equiv'
 num_node_features: 
     - 3
 epochs:
         #- 100
-        # - 250
+        #- 250
         #- 500
     - 1000
 early_stop:
-    - 2000 # cannot early stop here
+        #- 2000 # cannot early stop here
         #- 50
         #- 10
-        #- 150
-       #- 75
-       #- 200
-equiv_model:
-    #- False
-    - "Trying number of layers. Original  phi_edge and phi_node. Only 3 out of 10 cross vals" 
-n_layers:
+    - 100
+        #- 75
+        #- 200
+      #- 300
+       #equiv_model:
+       # - False
+    #- "input l2 norm to first equiv. input l2 norm of final embedding to classifier (throough max and mean pooling)" 
+      #n_layers:
+      #    - 1
+      #    - 2
+      #    - 3
+      #    - 4
+      #    - 5
+      #    - 6
+      #    - 7
+num_gin:
+        #- 0
     - 1
-    - 2
+      #- 2
+num_equiv:
+        #- 1
+      #- 2
     - 3
-    - 4
-    - 5
-    - 6
-    - 7
+      #- 4
+      #- 5
+      #- 6
 allow_stop:
-    - 0
+        #- 0
+    - 100
       #- 200 # make sure to include this in the code!! (has to run for at least 200)
 physics:
     - 0
 seed:
     - 0
 path_data:
-    - "../data/CoordToCnc" # 10RandRot_CoordToCnc or 4RotCoordToCnc or  CoordToCnc or CoordToCnc_KNN5
+    - "../data/CoordToCnc" # Options include: 10RandRot_CoordToCnc  4RotCoordToCnc  CoordToCnc  CoordToCnc_KNN5
 path_model:
     - "./experiments/util/"
 batch_size:
@@ -49,11 +63,12 @@ optim:
     - 'Adam'
 optim_lr:
         #- 0.000005
-    - 0.00001
-      #- 0.00005
+        #- 0.00001
+        #- 0.00005
     - 0.0001
       #- 0.0005
-    - 0.001
+      #- 0.001
+      #- 0.005
 weighted_loss:
     #- 0.4
     #- 0.5

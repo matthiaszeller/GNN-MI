@@ -15,10 +15,16 @@ def create_knn_data(surface, k_neighbours):
     coordinates = vtk_to_numpy(surface.GetPoints().GetData())
     distance_mat = distance_matrix(coordinates, coordinates, 2)
     nearest_neigh = np.argsort(distance_mat, axis=1)[:, :k_neighbours]
-    edges = np.array([[i, neighbour] for i in range(len(nearest_neigh)) for neighbour in nearest_neigh[i]])
-    sorted_edges = np.concatenate([np.max(edges, axis=1, keepdims=True), np.min(edges, axis=1, keepdims=True)], axis=1)
+    edges = np.array([[i, neighbour]
+                     for i in range(len(nearest_neigh))
+                     for neighbour in nearest_neigh[i]])
+    sorted_edges = np.concatenate([np.max(edges, axis=1, keepdims=True),
+                                   np.min(edges, axis=1, keepdims=True)],
+                                  axis=1)
     sorted_edges = np.unique(sorted_edges, axis=0)
-    reversed_edges = np.concatenate([np.max(sorted_edges, axis=1, keepdims=True), np.min(sorted_edges, axis=1, keepdims=True)], axis=1)
+    reversed_edges = np.concatenate([np.max(sorted_edges, axis=1, keepdims=True), 
+                                     np.min(sorted_edges, axis=1, keepdims=True)],
+                                    axis=1)
     edges = np.concatenate((sorted_edges, reversed_edges))
     edges = torch.from_numpy(edges.transpose()).type(torch.LongTensor)
     return edges
@@ -40,7 +46,6 @@ def edge_perturbation(A, alpha):
 def edge_diffusion(A, alpha):
     """Implements the edge diffusion algorithm for GNN data augmentation"""
     num_nodes = len(A)
-    Dinv = np.diag( 1 / np.sqrt(np.sum(A, axis=1)))
-    A_modified = alpha * np.linalg.inv(np.eye(num_nodes) - (1-alpha) * Dinv @ A @ Dinv)
+    Dinv = np.diag(1 / np.sqrt(np.sum(A, axis=1)))
+    A_modified = alpha * np.linalg.inv(np.eye(num_nodes)-(1-alpha)*Dinv@A@Dinv)
     return adjacency_matrix_to_edge_list(A_modified)
-

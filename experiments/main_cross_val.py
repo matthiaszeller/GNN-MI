@@ -10,7 +10,7 @@ import time
 
 
 # following is for book-keeping of experiments i.e. naming for wandb
-MODEL_TYPE = 'refractest'
+MODEL_TYPE = 'Equiv_GIN_Gaussian2'
 # Options include: 'Equiv_FullyCon_3CVoutof10' # 'noAugEdge'
 # #'MagToCnc_KNN5' # '10RandRot_CoordToCnc_CV10' or 'KNN5_CV10'
 # PATH_DATA = "../data/CoordToCnc"

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 from scipy.spatial import distance_matrix
@@ -49,3 +50,19 @@ def edge_diffusion(A, alpha):
     Dinv = np.diag(1 / np.sqrt(np.sum(A, axis=1)))
     A_modified = alpha * np.linalg.inv(np.eye(num_nodes)-(1-alpha)*Dinv@A@Dinv)
     return adjacency_matrix_to_edge_list(A_modified)
+
+
+def gaussian_noise(path_data="data/CoordToCnc",
+                   save_path="data/CoordToCncGaussian2", k=2,
+                   mean=0, std=0.1):
+    """Augments the data by adding Gaussian noise to the coordinate data.
+    First fetches the data as torch tensors from path_data, augments it k
+    times, and then saves it into save_path. For recommended usage: save_path
+    is empty, and path_data contains only original Coord data."""
+    for seg in os.listdir(path_data):
+        data = torch.load(path_data+"/"+seg)
+        torch.save(data, save_path+"/"+seg)
+        for i in range(1, k+1):
+            noise = torch.normal(mean=torch.ones(data.x.shape)*mean, std=0.1)
+            data.x = data.x + noise
+            torch.save(data, save_path+"/"+seg[:-3]+"NOISE"+str(i)+seg[-3:])

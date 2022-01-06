@@ -14,8 +14,8 @@ epochs:
 early_stop:
         #- 2000 # cannot early stop here
         #- 50
-        #- 10
-    - 100
+        #- 20
+     - 100
         #- 75
         #- 200
       #- 300
@@ -31,14 +31,14 @@ early_stop:
       #    - 6
       #    - 7
 num_gin:
-        #- 0
+    - 0
     - 1
       #- 2
 num_equiv:
         #- 1
       #- 2
     - 3
-      #- 4
+    - 4
       #- 5
       #- 6
 allow_stop:
@@ -50,7 +50,7 @@ physics:
 seed:
     - 0
 path_data:
-    - "../data/CoordToCnc" # Options include: 10RandRot_CoordToCnc  4RotCoordToCnc  CoordToCnc  CoordToCnc_KNN5
+    - "../data/CoordToCncGaussian2" # Options include: 10RandRot_CoordToCnc  4RotCoordToCnc  CoordToCnc  CoordToCnc_KNN5
 path_model:
     - "./experiments/util/"
 batch_size:
@@ -65,8 +65,8 @@ optim_lr:
         #- 0.000005
         #- 0.00001
         #- 0.00005
-    - 0.0001
-      #- 0.0005
+        # - 0.0001
+    - 0.0005
       #- 0.001
       #- 0.005
 weighted_loss:

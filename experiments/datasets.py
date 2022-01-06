@@ -121,6 +121,8 @@ class DataSet(Dataset):
                 continue
             if name[-7:-4] == 'KNN' and train != 'train':
                 continue
+            if name[-9:-4] == 'NOISE' and train != 'train':
+                continue
             self.data.append(name)  # name is name of file
         self.train = train
         self.data = np.sort(np.array(self.data))  # TODO: necessary?

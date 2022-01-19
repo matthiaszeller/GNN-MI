@@ -30,10 +30,10 @@ main_cross_val.py     |      Runs a grid search with cross validation on all com
                       |      platform! This does not use the test set. This should be called from inside the
                       |      MI-proj/experiments directory.
 evaluate. py          |      Same as cross_validation, but evaluates the model on test set once it has finished
-                      |      training. This should be run with only one value per hyperparameter in hyper_params.yaml.
-                      |      It is crucial to use the same seed here as used when doing the grid search. Also records
-                      |      all results on the wandb platform. This should be called from inside the
-                      |      MI-proj/experiments directory.
+                      |      training. This should be run with only one value per hyperparameter in
+                      |      hyper_params.yaml. It is crucial to use the same seed here as used when doing the
+                      |      grid search. Also records all results on the wandb platform. This should be called
+                      |      from inside the MI-proj/experiments directory.
 gnnexplainer.ipynb    |      Coming soon! Jupyter notebook for the GNNExplainer experiment and visualization.
 </pre>
 
@@ -44,8 +44,12 @@ GNNExplainer.py       |     Slightly modified code from the paper of [1].
 egnn.py               |     Slightly modified code from the paper of [2].
                       |     Code was obtained from the repo of [2].
 models.py             |     Contains all different models used in experiments.
-train.py              |     Contains a custom GNN object definition. Main script used for training and evaluating our models.
+train.py              |     Contains a custom GNN object definition. Main script used for training and
+                      |     evaluating our models.
 </pre>
 
+
  [1] paper: [GNNExplainer: Generating Explanations for Graph Neural Networks](https://arxiv.org/pdf/1903.03894.pdf), repo:  [egnn](https://github.com/RexYing/gnn-model-explainer).
+ 
+ 
  [2] paper: [E(n) Equivariant Graph Neural Networks](https://arxiv.org/pdf/2102.09844.pdf), repo: [GNNExplainer](https://github.com/vgsatorras/egnn).

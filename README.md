@@ -12,7 +12,7 @@ The way I recommend navigating this repo is to:
 ## Code structure
 
 
- #### All code is in the experiments folder: 
+ #### All code is in MI-proj/experiments: 
  <pre>
  Name                 |      Description
  ----------------------------------------------------------------------------------------------------------
@@ -41,7 +41,7 @@ gnnexplainer.ipynb    |      Coming soon! Jupyter notebook for the GNNExplainer 
 </pre>
 
 
-#### More code is found in the experiments/util:
+#### More code is found in MI-proj/experiments/util:
 <pre>
 GNNExplainer.py       |     Slightly modified code from the paper of [1].
                       |     Code was obtained from the repo of [1].

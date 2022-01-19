@@ -10,11 +10,11 @@ The way I recommend navigating this repo is to:
 5) Generate your experiments by running python main_cross_val with appropriate hyperparameters in hyper_params.yaml.
 
 ## Code structure
- #### All code is in the experiments folder:\ 
+ #### All code is in the experiments folder: 
  <pre>
- name                 |      Description\
- create_data.py       |      Data fetching and preprocessing. This should be run from the MI-proj directory.\
-                      |      The executed function is at the bottom of the file, note that our dataset is not\
+ name                 |      Description
+ create_data.py       |      Data fetching and preprocessing. This should be run from the MI-proj directory.
+                      |      The executed function is at the bottom of the file, note that our dataset is not
                       |      public, so you won't have access to the path and label_path directories. <br/>
  data_augmentation.py |      Contains all the data augmentation schemes attempted. Used in create_data.py.\
  datasets.py          |      Contains our custom DataSet object which is how we store the meshes. Also contains\

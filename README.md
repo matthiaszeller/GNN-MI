@@ -2,11 +2,11 @@
 Code and report for my semester project on using rotational and translational equivariant graph neural networks to predict cardiac arrest from 3 dimensional reconstructed arteries. For more information about the experiments, please check out my [write up](https://github.com/jacobbamberger/MI-proj/blob/main/MI_pred_Report.pdf)!
 
 ## Recommendation on navigating this repo
-The way I recommend navigating this repo is by:
-1) Looking at the [write up](https://github.com/jacobbamberger/MI-proj/blob/main/MI_pred_Report.pdf)
-2) Looking at the code structure below
-3) Looking at the [experiments results](https://wandb.ai/yayabambam/mi-prediction) on wandb platform. For more information on how to navigate that, see the appendix of the write-up.
-4) if you want to run your own results. You will need an MI-proj/data folder, containing a patient_dict.pickle file as described below in datasets.py description, and a data folder, for example CoordToCnc with your mesh data.
+The way I recommend navigating this repo is to:
+1) Look at the [write up](https://github.com/jacobbamberger/MI-proj/blob/main/MI_pred_Report.pdf)
+2) Look at the code structure below
+3) Look at the [experiments results](https://wandb.ai/yayabambam/mi-prediction) on wandb platform. For more information on how to navigate that, see the appendix of the write-up.
+4) If you want to run your own results. You will need an MI-proj/data folder, containing a patient_dict.pickle file as described below in datasets.py description, and a data folder, for example CoordToCnc with your mesh data.
 5) Generate your experiments by running python main_cross_val with appropriate hyperparameters in hyper_params.yaml.
 
 ## Code structure

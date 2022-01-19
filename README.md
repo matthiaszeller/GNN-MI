@@ -10,8 +10,8 @@ The way I recommend navigating this repo is to:
 5) Generate your experiments by running python main_cross_val with appropriate hyperparameters in hyper_params.yaml.
 
 ## Code structure
- All code is in the experiments folder:\ 
- 
+ #### All code is in the experiments folder:\ 
+ <pre>
  name                 |      Description\
  create_data.py       |      Data fetching and preprocessing. This should be run from the MI-proj directory.\
                       |      The executed function is at the bottom of the file, note that our dataset is not\
@@ -35,16 +35,16 @@ evaluate. py          |      Same as cross_validation, but evaluates the model o
                       |      all results on the wandb platform. This should be called from inside the MI-proj/experiments\
                       |      directory.<br/>
 gnnexplainer.ipynb    |      Coming soon! Jupyter notebook for the GNNExplainer experiment and visualization.<br/>
+</pre>
 
-
-More code is found in the experiments/util:\
-
+#### More code is found in the experiments/util:\
+<pre>
 GNNExplainer.py       |     Slightly modified code from the [GNNExplainer: Generating Explanations for Graph Neural Networks](https://arxiv.org/pdf/1903.03894.pdf) paper.\
                       |     Code was obtained from [this](https://github.com/RexYing/gnn-model-explainer) repo.<br/>
 egnn.py               |     Slightly modified code from the [E(n) Equivariant Graph Neural Networks](https://arxiv.org/pdf/2102.09844.pdf) paper.\
                       |     Code was obtained from [this](https://github.com/vgsatorras/egnn) repo.<br/>
 models.py             |     Contains all different models used in experiments.<br/>
 train.py              |     Contains a custom GNN object definition. Main script used for training and evaluating our models.<br/>
-
+</pre>
 
  

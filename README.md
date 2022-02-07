@@ -53,7 +53,7 @@ train.py              |     Contains a custom GNN object definition. Main script
 </pre>
 
 
- [1] paper: [GNNExplainer: Generating Explanations for Graph Neural Networks](https://arxiv.org/pdf/1903.03894.pdf), repo:  [egnn](https://github.com/RexYing/gnn-model-explainer).
+ [1] paper: [GNNExplainer: Generating Explanations for Graph Neural Networks](https://arxiv.org/pdf/1903.03894.pdf), repo:  [GNNExplainer](https://github.com/RexYing/gnn-model-explainer).
  
  
- [2] paper: [E(n) Equivariant Graph Neural Networks](https://arxiv.org/pdf/2102.09844.pdf), repo: [GNNExplainer](https://github.com/vgsatorras/egnn).
+ [2] paper: [E(n) Equivariant Graph Neural Networks](https://arxiv.org/pdf/2102.09844.pdf), repo: [egnn](https://github.com/vgsatorras/egnn).

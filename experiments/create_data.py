@@ -134,7 +134,7 @@ def create_mesh_data(surface, div=False, coord=False):
 
 
 def create_data(name, k_neigh, rot_angles, path, label_path):
-    savepath = os.path.join('data/', 'CoordToCncKNN200/')
+    savepath = os.path.join('data/', 'CoordToCnc/')
 
     # Create patient-segment dictionary
     if not os.path.exists('data/patient_dict.pickle'):

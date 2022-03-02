@@ -243,7 +243,7 @@ if __name__ == '__main__':
         '--augment_data',
         type=int,
         help='number of neighbours used for KNN',
-        default=200  # used to be 5!
+        default=0  # used to be 5!
     )
     parser.add_argument(
         '--data_source',
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     create_data(
         name='CoordToCnc',
-        rot_angles=[-18,  -9, 9,  18],
+        rot_angles=[],
         k_neigh=args.augment_data,
         path=args.data_source,
         label_path=args.labels_source

@@ -24,16 +24,13 @@ class EquivBaseline(torch.nn.Module):
 
         #self.pool = nn.EdgePooling(19) 
 
-        self.equiv = E_GCL(0, 16, 16, tanh=False, residual=False)#, act_fn=ELU(alpha=0.1))#ReLU()) #device='cuda')
+        self.equiv = E_GCL(0, 16, 16, tanh=False, residual=False)
         self.equiv1 = E_GCL(16, 16, 16, tanh=False)
-        self.equiv2 = E_GCL(16, 16, 16, tanh=False)#, act_fn=ELU(alpha=0.1))#)#, act_fn=ReLU()) #, device ='cuda')
-        self.equiv3 = E_GCL(16, 16, 16, tanh=False)#, act_fn=ELU(alpha=0.1))#)
+        self.equiv2 = E_GCL(16, 16, 16, tanh=False)
+        self.equiv3 = E_GCL(16, 16, 16, tanh=False)
         self.equiv4 = E_GCL(16, 16, 16, tanh=False)
         self.equiv5 = E_GCL(16, 16, 16, tanh=False)
-        self.equiv6 = E_GCL(16,16,16, tanh=False)        
-        #self.equiv4 = E_GCL(4, 4, 4, tanh=False)
-        #self.equiv5 = E_GCL(4, 4, 4, tanh=False)
-        #self.equiv6 = E_GCL(4, 4, 4, tanh=False)
+        self.equiv6 = E_GCL(16,16,16, tanh=False)
 
         self.gmp = nn.global_mean_pool
         self.gap = nn.global_max_pool
@@ -156,7 +153,7 @@ class GnnBaseline(torch.nn.Module):
     def __init__(self, dataset):
         super().__init__()
 
-        self.gin_input = self.get_GIN(1, 16, 16)
+        self.gin_input = self.get_GIN(3, 16, 16)
         self.gin16 = self.get_GIN(16, 16, 16)
 
         self.pool = nn.EdgePooling(16) # this layer could not run on GPU for Jacob
@@ -168,15 +165,15 @@ class GnnBaseline(torch.nn.Module):
             Linear(2 * 16 + 1, 16),
             ELU(alpha=0.1),
             Dropout(p=0.5),
-            Linear(16, dataset.num_classes)#,
-            #Softmax(dim=1)
+            Linear(16, dataset.num_classes),
+            Softmax(dim=1) #TODO: remove this or change loss function to one that does not recompute the softmax
         )
 
     @staticmethod
     def get_GIN(in_dim, h_dim, out_dim):
         MLP = Sequential(
             Linear(in_dim, h_dim),
-            BatchNorm1d(h_dim),
+            BatchNorm1d(h_dim), # TODO: is this really necessary?
             ReLU(),
             Linear(h_dim, out_dim)
         )
@@ -193,13 +190,13 @@ class NoPhysicsGnn(GnnBaseline):
 
         #x = x - x.mean(dim=0)
        # x = x.div(x.)
-        x = self.gin_input(x.norm(dim=1).unsqueeze(dim=1), edge_index)
+        x = self.gin_input(x, edge_index)
         x = F.elu(x, alpha=0.1)
-        x, edge_index, batch, _ = self.pool(x, edge_index, batch)
+        #x, edge_index, batch, _ = self.pool(x, edge_index, batch)
 
         x = self.gin16(x, edge_index)
         x = F.elu(x, alpha=0.1)
-        x, edge_index, batch, _ = self.pool(x, edge_index, batch)
+        #x, edge_index, batch, _ = self.pool(x, edge_index, batch)
 
         x = self.gin16(x, edge_index)
         x = F.elu(x, alpha=0.1)
@@ -207,6 +204,6 @@ class NoPhysicsGnn(GnnBaseline):
         x2 = self.gap(x, batch)
 
         x = torch.cat([x1, x2], dim=1)
-        x = torch.cat((x, segment.view(-1, 1)), dim=1)
+        x = torch.cat((x, segment.view(-1, 1)), dim=1)   #TODO: CHange this into a one-hot-encoding
         x = self.classifier(x)
         return x

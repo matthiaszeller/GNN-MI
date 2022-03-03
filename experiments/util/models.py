@@ -23,8 +23,8 @@ class GnnBaseline(torch.nn.Module):
             Linear(2 * 16 + 1, 16), # TODO: once one-hot-encoding for segment is done, should be +3 instead of +1
             ELU(alpha=0.1),
             Dropout(p=0.5),
-            Linear(16, dataset.num_classes),
-            Softmax(dim=1) #TODO: remove this or change loss function to one that does not recompute the softmax
+            Linear(16, dataset.num_classes), # TODO: For the culprit/nonculprit classification, we could simply predict one probability instead of two, saving parameters.
+            Softmax(dim=1) # TODO: remove this or change loss function to one that does not recompute the softmax
         )
 
     @staticmethod

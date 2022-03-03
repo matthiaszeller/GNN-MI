@@ -7,6 +7,19 @@ from .models import NoPhysicsGnn, EquivNoPhys
 
 
 class GNN:
+    """
+    Base class that contains the model, and information about the model.
+    Currently this covers only the "NoPhysicsGnn" and "Equiv" models.
+    """
+    # TODO: Add a model "EquivWSS" which is exactly like "Equiv", but
+    # which uses the WSS scalars as invariant features h. 
+
+    # TODO: Reimplement the models that includes Physics
+    # (i.e. loss term at node level) from Yunshu's project
+    # (https://github.com/yooyoo9/MI-detection), and combine that
+    # to the Equivariant framework. Note that this is different than,
+    # EquivWSS, as the latter does not do any prediction at the node level. 
+    # Good luck! :) 
     def __init__(
             self,
             model_path,
@@ -24,7 +37,7 @@ class GNN:
         print("Using device:", self.device)
         self.model_name = model_param['name']
         self.model_path = model_path
-        self.ratio = 1.0  # TODO: might delete. only useful for phys models
+        #self.ratio = 1.0  # only useful for phys models
 
         if self.model_name == 'NoPhysicsGnn':
             self.physics = False
@@ -56,8 +69,7 @@ class GNN:
                                              momentum=optim_param['momentum'])
         weights = torch.tensor([1 - weight1, weight1])  # for class imbalance
 
-        self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
-        # self.criterion_node = torch.nn.MSELoss().to(self.device)
+        self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device) # TODO: check consistency with last layer of classifier. (Seems to apply softmax twice.)
 
     @staticmethod
     def calculate_metrics(y_pred, y_true):
@@ -92,7 +104,6 @@ class GNN:
                                   data.edge_index,
                                   data.batch,
                                   data.segment)
-            # print(cnc_pred, data.y)
             loss = loss_cnc = self.criterion(cnc_pred, data.y)
         return loss, loss_cnc, cnc_pred, cnc
 
@@ -103,7 +114,7 @@ class GNN:
         for epoch_idx in range(epochs):
             if epoch_idx % 10 == 0:
                 print('epoch nb:', epoch_idx)
-            running_loss_cnc = 0.0  # what is this??
+            running_loss_cnc = 0.0  # Remains from physics models.
             y_pred = np.array([])
             y_true = np.array([])
             for data in self.train_loader:
@@ -135,7 +146,7 @@ class GNN:
             # val score:
             (acc, prec, rec, sensitivity,
             specificity, f1_score, val_loss) = self.evaluate(val_set=True)
-            if val_loss < min_val_loss:
+            if val_loss < min_val_loss: # TODO: change this to average of last 3 val_loss is < min avg of 3 consecutive val losses
                 epochs_no_improve = 0
                 min_val_loss = val_loss
             else:

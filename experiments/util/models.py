@@ -39,7 +39,7 @@ class GnnBaseline(torch.nn.Module):
 
 class EquivNoPhys(GnnBaseline):
     def __init__(self, dataset, num_gin=2, num_equiv=2):
-        super().__init__()
+        super().__init__(dataset)
 
         self.num_gin=num_gin
         self.num_equiv=num_equiv

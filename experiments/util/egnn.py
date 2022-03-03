@@ -2,8 +2,6 @@ from torch import nn
 import torch
 import torch.nn.functional as F
 
-
-
 class E_GCL(nn.Module):
     """
     E(n) Equivariant Convolutional Layer
@@ -29,23 +27,6 @@ class E_GCL(nn.Module):
             nn.BatchNorm1d(hidden_nf),
             act_fn,
             nn.Linear(hidden_nf, hidden_nf))
-            #act_fn,
-            #nn.Linear(hidden_nf, hidden_nf)) # result is dim of m_i
-            
-        #self.edge_mlp = nn.Sequential( # as in noPhys GNN. Same edge function
-            #nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
-            #nn.BatchNorm1d(hidden_nf),
-            #nn.ReLU(),
-            #nn.Linear(hidden_nf, hidden_nf))
-
-        #self.node_mlp = nn.Sequential( # this can be changed easily
-        #    nn.Linear(hidden_nf + input_nf, hidden_nf), #input is dim of h_i + m_i
-        #    nn.BatchNorm1d(hidden_nf),
-        #    act_fn,
-        #    nn.Linear(hidden_nf, output_nf))
-            #act_fn)
-        #    nn.Linear(hidden_nf, output_nf),
-        #    act_fn) # result is dim of h
 
         self.node_mlp = nn.Sequential(
             nn.Linear(hidden_nf + input_nf, hidden_nf),

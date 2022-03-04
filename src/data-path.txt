@@ -1,0 +1,1 @@
+/run/user/1000/gvfs/smb-share:server=files3.epfl.ch,share=data/mazeller/gnn-mi/data

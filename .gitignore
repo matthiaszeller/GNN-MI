@@ -1,0 +1,13 @@
+
+
+# Python
+__pycache__
+
+# Jupyter
+*.ipynb-checkpoints
+
+#
+src/data-path.txt
+
+# IDE - IntelliJ (Pycharm, Dataspell)
+.idea

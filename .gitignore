@@ -4,7 +4,7 @@
 __pycache__
 
 # Jupyter
-*.ipynb-checkpoints
+*.ipynb_checkpoints
 
 #
 src/data-path.txt

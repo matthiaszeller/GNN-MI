@@ -1,3 +1,4 @@
+import logging
 import os
 import argparse
 
@@ -10,10 +11,9 @@ import pandas as pd
 import torch
 import math
 
-# from datasets import MyData
 from torch_geometric.data import Data
 from data_augmentation import create_knn_data
-
+from setup import *
 
 NAME_TO_INT = {'LAD': 0, 'LCX': 1, 'RCA': 2}
 
@@ -23,6 +23,7 @@ def read_labels(filename):
     Creates list of culprit segments
     0 for non-culprit, 1 for culprit
     """
+    logging.info(f'parsing labels ...')
     df = pd.read_excel(filename, engine='openpyxl')
     idx_culprit = df.index[df['FC'] == 1].tolist()
     culprits = df['Code'][idx_culprit].to_list()
@@ -31,6 +32,7 @@ def read_labels(filename):
 
 def read_tsvi(filename):
     """Creates dictionary between segment and TSVI measurement"""
+    logging.info('parsing tsvi ...')
     df = pd.read_excel(filename)
     seg_to_tsvi = dict()
     for index, row in df.iterrows():
@@ -39,6 +41,7 @@ def read_tsvi(filename):
 
 
 def read_poly_data(filename):
+    logging.debug(f'reading poly data from file {filename}')
     reader = vtk.vtkXMLPolyDataReader()
     reader.SetFileName(filename)
     reader.Update()
@@ -47,6 +50,7 @@ def read_poly_data(filename):
 
 def get_edge_index(surface):
     """Returns list of edges of the mesh as pairs of nodes"""
+    logging.debug('parsing edge indices')
     cells = vtk_to_numpy(surface.GetPolys().GetData())
     triangles = cells.reshape(-1, 4)[:, 1:4]
     T = np.concatenate(
@@ -84,6 +88,7 @@ def create_patient_dict(path, savepath):
     :param path: path to data source
     :param savepath: where to save the dictionary
     """
+    logging.info(f'creating patient dict with source -> dest: {path} -> {savepath}')
     files = []
     for file in os.listdir(path):
         if file.endswith(".vtp"):
@@ -98,7 +103,7 @@ def create_patient_dict(path, savepath):
             data_dict[patient] = []
             data_dict[patient].append(item)
 
-    with open(os.path.join(savepath, 'patient_dict.pickle'), 'wb') as f:
+    with open(savepath, 'wb') as f:
         pickle.dump(data_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
@@ -133,33 +138,40 @@ def create_mesh_data(surface, div=False, coord=False):
     return data
 
 
-def create_data(name, k_neigh, rot_angles, path, label_path):
-    savepath = os.path.join('data/', 'CoordToCnc/')
+def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
+    logging.info(f'running create_data(), name={name}, k_neigh={k_neigh}, rot_angles={rot_angles}')
+    # Initialize writing path
+    savepath = path_write.joinpath(name)
+    if not savepath.exists():
+        savepath.mkdir()
 
     # Create patient-segment dictionary
-    if not os.path.exists('data/patient_dict.pickle'):
-        create_patient_dict(path, 'data/')
-    with open('data/patient_dict.pickle', 'rb') as f:
+    path_patient_dic = path_write.joinpath('patient_dict.pickle')
+    if not path_patient_dic.exists():
+        create_patient_dict(path_input, path_patient_dic)
+    logging.info('loading patient dictionary ...')
+    with open(path_patient_dic, 'rb') as f:
         data_dict = pickle.load(f)
 
-    culprits = read_labels(label_path)
+    # Parse labels
+    culprits = read_labels(path_label)
     if name == 'TsviPlusCnc':
-        seg_to_tsvi = read_tsvi(label_path)
+        seg_to_tsvi = read_tsvi(path_label)
 
-    print("Nb of keys: ", len(data_dict.keys()))
+    logging.info(f'number of keys in patient dict: {len(data_dict)}')
 
+    # Loop over patients: process data from input path and write to output path
     counter = 0
     for pt in data_dict.keys():
         for pt_seg in data_dict[pt]:
-            print(counter)
+            logging.debug(f'processing item {pt_seg}')
             counter += 1
             culprit = 1 if pt_seg in culprits else 0
             if name == 'TsviPlusCnc':
                 tsvi = seg_to_tsvi[pt_seg]
             seg = pt_seg[-3:]  # LAD, RCA or LCX
-            cur_path = os.path.join(savepath, pt_seg + '.pt')  # savename
             # read data
-            surface = read_poly_data(path + '/' + pt_seg + '_WSSMag.vtp')
+            surface = read_poly_data(path_input + '/' + pt_seg + '_WSSMag.vtp')
             # get points of surface
             pos = torch.from_numpy(
                                 vtk_to_numpy(
@@ -190,6 +202,7 @@ def create_data(name, k_neigh, rot_angles, path, label_path):
             elif name == 'TsviPlusCnc':
                 segment_data = vtk_to_numpy(surface.GetPoints().GetData())
                 y = torch.tensor([culprit, tsvi], dtype=torch.float)
+
             segment_data = torch.from_numpy(
                                         segment_data).type(torch.FloatTensor)
             data = Data(x=segment_data,
@@ -197,7 +210,8 @@ def create_data(name, k_neigh, rot_angles, path, label_path):
                         y=y,
                         pos=pos,  # TODO: replace by torch.tensor??
                         segment=NAME_TO_INT[seg])
-            # torch.save(data, cur_path)
+            path_file = savepath.joinpath(pt_seg + '.pt')
+            torch.save(data, path_file)
 
             # k_neighbours data aug:
             if k_neigh != 0:
@@ -231,6 +245,9 @@ def create_data(name, k_neigh, rot_angles, path, label_path):
 
 
 if __name__ == '__main__':
+    logging.info('Running create_data.py ...')
+    path_data_in, path_data_out = get_data_paths()
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--dataset_name',
@@ -249,18 +266,13 @@ if __name__ == '__main__':
         '--data_source',
         type=str,
         help='path to raw data',
-        # default = '/app/original_data/CFD/ClinicalCFD/MagnitudeClinical'
-
-        default='/Volumes/cardio-project/cardio/CFD/ClinicalCFD/MagnitudeClinical'
-        # default='/mnt/NAS/cardio/CFD/ClinicalCFD/MagnitudeClinical'
+        default=str(path_data_in.joinpath('CFD/ClinicalCFD/MagnitudeClinical'))
     )
     parser.add_argument(
         '--labels_source',
         type=str,
         help='path to data label',
-        # default = '/app/original_data/CFD/labels/WSSdescriptors_AvgValues.xlsx'
-        default='/Volumes/cardio-project/cardio/CFD/labels/WSSdescriptors_AvgValues.xlsx'
-        # default='../data/WSSdescriptors_AvgValues.xlsx'
+        default=str(path_data_in.joinpath('CFD/labels/WSSdescriptors_AvgValues.xlsx'))
     )
     args = parser.parse_args()
 
@@ -268,7 +280,8 @@ if __name__ == '__main__':
         name='CoordToCnc',
         rot_angles=[],
         k_neigh=args.augment_data,
-        path=args.data_source,
-        label_path=args.labels_source
+        path_input=args.data_source,
+        path_label=args.labels_source,
+        path_write=path_data_out
     )
 # options are ['CoordToCnc', 'WssToCnc', 'WssPlusCnc', 'TsviPlusCnc']

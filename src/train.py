@@ -37,14 +37,15 @@ class GNN:
         dev = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(dev)
         print("Using device:", self.device)
+        self.model_type = model_param['type']
         self.model_name = model_param['name']
         #self.ratio = 1.0  # only useful for phys models
 
-        if self.model_name == 'NoPhysicsGnn':
+        if self.model_type == 'NoPhysicsGnn':
             self.physics = False
             self.automatic_update = False
             self.model = NoPhysicsGnn(train_set)
-        elif self.model_name == 'Equiv':
+        elif self.model_type == 'Equiv':
             self.physics = False
             self.automatic_update = False
             self.model = EquivNoPhys(train_set,

@@ -1,5 +1,4 @@
-
-
+import logging
 import time
 from itertools import product
 
@@ -7,10 +6,13 @@ import torch
 import wandb
 import yaml
 
+from src import setup
 from src.datasets import split_data
 from src.train import GNN
 
 # following is for book-keeping of experiments i.e. naming for wandb
+from src.utils import grid_search
+
 MODEL_TYPE = 'Equiv_GIN_Gaussian2'
 # Options include: 'Equiv_FullyCon_3CVoutof10' # 'noAugEdge'
 # #'MagToCnc_KNN5' # '10RandRot_CoordToCnc_CV10' or 'KNN5_CV10'
@@ -20,7 +22,7 @@ MODEL_TYPE = 'Equiv_GIN_Gaussian2'
 print("cuda available: ", torch.cuda.is_available())
 
 
-def run_cross_val(split_list, args, test_set, run_dic=None):
+def run_cross_val(split_list, args, test_set):
     """
     Runs cross validation on dataset that is already split in the appropriate
     way into a list of (train, validation) splits, a test_set, arguments of the
@@ -37,9 +39,6 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
 
     args : dictionary of arguments to feed into the model. Check out the
     hyperparameters.yaml file for an example.
-
-    run_dic : optional, dictionary defining gridsearch the run is apart of.
-    Used only to keep track of experiments TODO: make optional
     """
 
     empty_run = wandb.init(reinit=True,
@@ -78,8 +77,6 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
         print("Val set length: ", len(val_set))
         print("Val patients: ", val_set.data)
         print("arguments: ", args)
-        print("")
-        print("run dictionary: ", run_dic)
 
         # set model hyperparameters
         optim_param = {
@@ -89,7 +86,7 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
         }
         model_param = {
             'physics': args['physics'],
-            'name': args['model'],
+            'type': args['model']['type'],
         }
 
         # initialize the model
@@ -136,7 +133,6 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
     print("arguments for the k runs: ", args)
     print("Test set length: ", len(test_set))
     print("Test patients: ", test_set.data)
-    print("run grid: ", run_dic)
 
     # average over indiv runs and log metrics in wandb
     avg_dic = {}
@@ -148,25 +144,18 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
 
 print("grid search starting .......")
 # following file contains all hyperparameters to try in the grid search
-yaml_file = open("../experiments/hyper_params.yaml")
-# load hyperparameters as dictionary
-arg_dic = yaml.load(yaml_file, Loader=yaml.FullLoader)
-keys = arg_dic.keys()
-values = arg_dic.values()
-tot_length = len(list(product(*values)))  # total nb of runs to estimate time
-end = time.time()
-for count, instance in enumerate(product(*values)):  # loops through the grid
-    print(count, " out of ", tot_length, " options in: ", time.time()-end)
-    config = dict(zip(keys, instance))  # config file to use as parameters
+yaml_file = "../experiments/hyper_params.yaml"
+
+for count, config in enumerate(grid_search(yaml_file)):
+    logging.info(f'grid search iter {count}, config = {config}')
     # split data as test set and then cross val list with
     # elements of format (train, valid)
-    test_set, split_list = split_data(path=config["path_data"],
+    test_set, split_list = split_data(path=setup.get_dataset_path(config['dataset']),
                                       num_node_feat=3,
                                       cv=True,
                                       k_cross=10,
                                       seed=config['seed'])
     run_cross_val(split_list=split_list,
                   args=config,
-                  test_set=test_set,
-                  run_dic=arg_dic)
+                  test_set=test_set)
     end = time.time()

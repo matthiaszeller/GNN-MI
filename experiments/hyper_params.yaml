@@ -2,8 +2,9 @@
 
 
 model:
-        #  - 'NoPhysicsGnn'
-    - 'Equiv'
+    type: 'Equiv' # 'NoPhysicsGnn'
+    name: 'name'
+
 num_node_features: 
     - 3
 epochs:
@@ -49,8 +50,8 @@ physics:
     - 0
 seed:
     - 0
-path_data:
-    - "../data/CoordToCncGaussian2" # Options include: 10RandRot_CoordToCnc  4RotCoordToCnc  CoordToCnc  CoordToCnc_KNN5
+dataset:
+    - "CoordToCncGaussian2" # Options include: 10RandRot_CoordToCnc  4RotCoordToCnc  CoordToCnc  CoordToCnc_KNN5
 batch_size:
     - 1
       #- 10

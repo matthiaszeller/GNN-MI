@@ -1,4 +1,4 @@
-
+import logging
 
 import numpy as np
 import torch
@@ -13,6 +13,13 @@ class GNN:
     """
     Base class that contains the model, and information about the model.
     Currently this covers only the "NoPhysicsGnn" and "Equiv" models.
+
+    Performs the following steps:
+        - initialize torch.device
+        - instantiate data loaders
+        - instantiate model and move to device
+        - instantiate optimizer
+        - instantiate criterion
     """
     # TODO: Add a model "EquivWSS" which is exactly like "Equiv", but
     # which uses the WSS scalars as invariant features h. 
@@ -39,7 +46,7 @@ class GNN:
         print("Using device:", self.device)
         self.model_type = model_param['type']
         self.model_name = model_param['name']
-        #self.ratio = 1.0  # only useful for phys models
+        self.ratio = 1.0  # only useful for phys models
 
         if self.model_type == 'NoPhysicsGnn':
             self.physics = False
@@ -53,14 +60,14 @@ class GNN:
                                      num_equiv=args['num_equiv'])
     #                                 , args['n_layers'])
         else:
-            print("Unrecognized model name")
+            raise ValueError('unrecognized model type')
 
         self.model.to(self.device)
 
         # initialize data loader for batching
         self.train_loader = DataLoader(train_set, batch_size, shuffle=True)
         self.val_loader = DataLoader(valid_set, batch_size, shuffle=False)
-        self.test_loader = DataLoader(test_set, batch_size, shuffle=False)
+        self.test_loader = DataLoader(test_set, batch_size, shuffle=False) if test_set is not None else None
 
         if optim_param['optimizer'] == 'Adam':
             self.optimizer = torch.optim.Adam(self.model.parameters(),
@@ -99,23 +106,23 @@ class GNN:
 
     def get_losses(self, data):
         if self.physics:
-            print("!! Wrong argument: self.physics set to true. Not supported in this project.")
-        else:
-            cnc = data.y
-            cnc_pred = self.model(data.x,
-                                  data.edge_index,
-                                  data.batch,
-                                  data.segment)
-            loss = loss_cnc = self.criterion(cnc_pred, data.y)
+            raise ValueError("!! Wrong argument: self.physics set to true. Not supported in this project.")
+
+        cnc = data.y
+        cnc_pred = self.model(data.x,
+                              data.edge_index,
+                              data.batch,
+                              data.segment)
+        loss = loss_cnc = self.criterion(cnc_pred, data.y)
         return loss, loss_cnc, cnc_pred, cnc
 
     def train(self, epochs, early_stop, allow_stop=200, run=wandb):
         self.model.train()
         epochs_no_improve = 0
         min_val_loss = 1e8
-        for epoch_idx in range(epochs):
+        for epoch_idx in range(1, epochs + 1):
             if epoch_idx % 10 == 0:
-                print('epoch nb:', epoch_idx)
+                logging.info(f'epoch {epoch_idx} / {epochs}')
             running_loss_cnc = 0.0  # Remains from physics models.
             y_pred = np.array([])
             y_true = np.array([])
@@ -154,10 +161,11 @@ class GNN:
             else:
                 epochs_no_improve += 1
             if epochs_no_improve > early_stop and epoch_idx > allow_stop:
-                print("Early stoped at epoch: ", epoch_idx)
+                logging.info(f'early stop at epoch {epoch_idx}')
                 return (acc, prec, rec, sensitivity,
                         specificity, f1_score, val_loss)
-        print("Done training!")
+
+        logging.info('training done')
         return acc, prec, rec, sensitivity, specificity, f1_score, val_loss
 
     def evaluate(self, val_set, run=wandb):
@@ -183,6 +191,7 @@ class GNN:
                 y_true = np.append(y_true, cnc.cpu().detach().numpy())
                 running_loss_cnc += loss_cnc.item()
                 running_loss += loss.item()
+
         val_loss_cnc = running_loss_cnc / len(self.val_loader.dataset)
         val_loss = running_loss / len(self.val_loader.dataset)
         (acc, prec, rec, sensitivity,

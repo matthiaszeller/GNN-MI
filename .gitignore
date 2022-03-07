@@ -6,6 +6,8 @@ data
 src/data-path.txt
 
 # --- General
+# backups
+*.backup
 # Temporary folder for tests
 tmp
 # OS management of deleted files

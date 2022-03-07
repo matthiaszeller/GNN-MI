@@ -1,8 +1,6 @@
-
-
-from pathlib import Path
 import logging
-
+from functools import wraps
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -12,6 +10,15 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+
+
+# Wandb parameters
+# Follow procedure on this webpage https://wandb.ai/quickstart/pytorch
+# and set the `project` and `entity` fields below
+WANDB_SETTINGS = {
+    'project': 'egnn-mi',
+    'entity': 'mazeller'
+}
 
 
 def get_data_paths():
@@ -39,4 +46,21 @@ def get_data_paths():
     # Hard-coded project structure: data location relative to this setup.py file
     path = Path(__file__).parent.parent.joinpath('data')
     return path, path
+
+
+def get_dataset_path(dataset_name: str):
+    _, path = get_data_paths()
+    return path.joinpath(dataset_name)
+
+
+def arg_logger(fun):
+    # Based on https://stackoverflow.com/questions/23983150/how-can-i-log-a-functions-arguments-in-a-reusable-way-in-python
+    # Possible improvements with https://gist.github.com/DarwinAwardWinner/1170921
+    @wraps(fun)
+    def inner(*args, **kwargs):
+        logging.debug(f'calling {fun.__name__} with args {args}, kwargs {kwargs}')
+        fun(*args, **kwargs)
+
+    return inner
+
 

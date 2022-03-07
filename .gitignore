@@ -4,13 +4,16 @@ data
 
 # --- Project specific
 src/data-path.txt
-*.log
 
 # --- General
 # Temporary folder for tests
 tmp
 # OS management of deleted files
 *.fuse_hidden*
+# Logging
+*.log
+# Wandb
+wandb
 
 # --- Python & Tools
 

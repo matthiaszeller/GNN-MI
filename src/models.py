@@ -37,12 +37,13 @@ class GnnBaseline(torch.nn.Module):
         )
         return nn.GINConv(MLP, eps=0.0, train_eps=False)
 
+
 class EquivNoPhys(GnnBaseline):
     def __init__(self, dataset, num_gin=2, num_equiv=2):
         super().__init__(dataset)
 
-        self.num_gin=num_gin
-        self.num_equiv=num_equiv
+        self.num_gin = num_gin
+        self.num_equiv = num_equiv
 
         self.equiv = E_GCL(0, 16, 16, tanh=False, residual=False)
         self.equiv1 = E_GCL(16, 16, 16, tanh=False)
@@ -50,7 +51,7 @@ class EquivNoPhys(GnnBaseline):
         self.equiv3 = E_GCL(16, 16, 16, tanh=False)
         self.equiv4 = E_GCL(16, 16, 16, tanh=False)
         self.equiv5 = E_GCL(16, 16, 16, tanh=False)
-        self.equiv6 = E_GCL(16,16,16, tanh=False)
+        self.equiv6 = E_GCL(16, 16, 16, tanh=False)
 
         self.gin = self.get_GIN(16, 16, 16)
         self.gin2 = self.get_GIN(16, 16, 16)
@@ -88,6 +89,7 @@ class EquivNoPhys(GnnBaseline):
         x = torch.cat((x, segment.view(-1, 1)), dim=1) #TODO: Change this into a one-hot-encoding
         x = self.classifier(x)
         return x
+
 
 class NoPhysicsGnn(GnnBaseline):
     """

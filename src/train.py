@@ -76,14 +76,14 @@ class GNN:
 
     @staticmethod
     def calculate_metrics(y_pred, y_true):
-        '''
+        """
         Calculates several metrics to evaluate model.
-        
+
         Parameters
         -----------
         y_pred : np.array with predictions of model
         y_true : np.array with labels
-        '''
+        """
         accuracy = accuracy_score(y_true, y_pred)
         # tp/(tp + fp) i.e. fracttion of right positively labelled guesses
         precision = precision_score(y_true, y_pred, zero_division=0)
@@ -162,9 +162,9 @@ class GNN:
         return acc, prec, rec, sensitivity, specificity, f1_score, val_loss
 
     def evaluate(self, val_set, run=wandb):
-        '''
+        """
         val_set: bool indicating whether we use validation or test set
-        '''
+        """
         if val_set:
             dataloader = self.val_loader
             prefix = 'val'

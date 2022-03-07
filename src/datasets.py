@@ -11,7 +11,7 @@ from torch_geometric.data import Dataset
 
 
 def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
-    '''
+    """
     Splits the data fetched from `path` folder.
     Returns train, valid, test split, each are DataSet objects.
     A design choice is that the split is done at the level of patients,
@@ -26,7 +26,7 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
               if cv above is False, this does not impact the code
     seed : int, controls random state. Ensuring same train val and
            test split across experiments
-    '''
+    """
     # TODO: be convinced that this choice is the right one
     # (this ensures/facilitates that we don'T train on
     # augmented data from valid/test set.)
@@ -94,7 +94,7 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
 
 class DataSet(Dataset):
     def __init__(self, path, patients, train='train', num_node_feat=3):
-        '''
+        """
         Creates a Dataset child object which works with Dataloaders
         for batching.
 
@@ -107,7 +107,7 @@ class DataSet(Dataset):
                 the augmented data points should eb included in the
                 DataSet (they are included only for training)
         num_node_feat : int, number of features oper node.
-        '''
+        """
         super(DataSet, self).__init__()
         self.path = path
         self.data = []
@@ -140,7 +140,13 @@ class DataSet(Dataset):
     def processed_file_names(self) -> Union[str, List[str], Tuple]:
         return []
 
+    def download(self):
+        pass
+
     def _download(self):
+        pass
+
+    def process(self):
         pass
 
     def _process(self):

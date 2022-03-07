@@ -123,7 +123,7 @@ class E_GCL(nn.Module):
 
 class EGNN(nn.Module):
     def __init__(self, in_node_nf, hidden_nf, out_node_nf, in_edge_nf=0, device='cpu', act_fn=nn.SiLU(), n_layers=4, residual=True, attention=False, normalize=False, tanh=False):
-        '''
+        """
 
         :param in_node_nf: Number of features for 'h' at the input
         :param hidden_nf: Number of hidden features
@@ -142,7 +142,7 @@ class EGNN(nn.Module):
         :param tanh: Sets a tanh activation function at the output of phi_x(m_ij). I.e. it bounds the output of
                         phi_x(m_ij) which definitely improves in stability but it may decrease in accuracy.
                         We didn't use it in our paper.
-        '''
+        """
 
         super(EGNN, self).__init__()
         self.hidden_nf = hidden_nf

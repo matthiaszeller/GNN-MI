@@ -21,7 +21,7 @@ print("cuda available: ", torch.cuda.is_available())
 
 
 def run_cross_val(split_list, args, test_set, run_dic=None):
-    '''
+    """
     Runs cross validation on dataset that is already split in the appropriate
     way into a list of (train, validation) splits, a test_set, arguments of the
     single run, and meta argument of the grid search.
@@ -40,7 +40,7 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
 
     run_dic : optional, dictionary defining gridsearch the run is apart of.
     Used only to keep track of experiments TODO: make optional
-    '''
+    """
 
     empty_run = wandb.init(reinit=True,
                            project='mi-prediction')

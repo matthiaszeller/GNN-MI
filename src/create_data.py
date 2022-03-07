@@ -174,14 +174,17 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
             surface = read_poly_data(path_input + '/' + pt_seg + '_WSSMag.vtp')
             # get points of surface
             pos = torch.from_numpy(
-                                vtk_to_numpy(
-                                    surface.GetPoints()
-                                           .GetData())).type(torch.FloatTensor)
+                vtk_to_numpy(
+                    surface.GetPoints()
+                           .GetData()
+                )
+            ).type(torch.FloatTensor)
+
             num_nodes = len(pos)
             edges = get_edge_index(surface)
             edge_index = torch.from_numpy(
-                                     edges.transpose()
-                                         ).type(torch.LongTensor)
+                edges.transpose()
+            ).type(torch.LongTensor)
 
             if name == 'CoordToCnc':
                 y = culprit
@@ -196,22 +199,25 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                                   axis=1).reshape(-1, 1)
                 one_culprits = np.ones((num_nodes, 1)) * culprit
                 y = torch.from_numpy(
-                                np.concatenate((wss_mag, one_culprits),
-                                               axis=1)).type(torch.FloatTensor)
+                    np.concatenate((wss_mag, one_culprits), axis=1)
+                ).type(torch.FloatTensor)
                 segment_data = vtk_to_numpy(surface.GetPoints().GetData())
             elif name == 'TsviPlusCnc':
                 segment_data = vtk_to_numpy(surface.GetPoints().GetData())
                 y = torch.tensor([culprit, tsvi], dtype=torch.float)
 
-            segment_data = torch.from_numpy(
-                                        segment_data).type(torch.FloatTensor)
+            segment_data = torch.from_numpy(segment_data).type(torch.FloatTensor)
             data = Data(x=segment_data,
                         edge_index=edge_index,
                         y=y,
                         pos=pos,  # TODO: replace by torch.tensor??
                         segment=NAME_TO_INT[seg])
             path_file = savepath.joinpath(pt_seg + '.pt')
-            torch.save(data, path_file)
+            if path_file.exists():
+                logging.info(f'file already exists {str(path_file)}')
+            else:
+                logging.info(f'saving data in file {str(path_file)}')
+                torch.save(data, path_file)
 
             # k_neighbours data aug:
             if k_neigh != 0:
@@ -221,7 +227,10 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                             y=y,
                             pos=pos,
                             segment=NAME_TO_INT[seg])
-                torch.save(data, os.path.join(savepath, pt_seg + '.pt'))
+
+                path_file = savepath.joinpath(f'{pt_seg}_KNN{k_neigh}.pt')
+                logging.info(f'saving KNN-augmented data in file {str(path_file)}')
+                torch.save(data, path_file)
 
             # rotation_data aug
             for angle in rot_angles:
@@ -238,9 +247,9 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                             y=y,
                             pos=pos,
                             segment=NAME_TO_INT[seg])
-                torch.save(data,
-                           os.path.join(savepath,
-                                        pt_seg+'_rot'+f'{angle:03d}'+'.pt'))
+                path_file = savepath.joinpath(f'{pt_seg}_rot{angle:03d}.pt')
+                logging.info(f'saving rotation-augmented data in file {str(path_file)}')
+                torch.save(data, path_file)
     return
 
 
@@ -278,7 +287,7 @@ if __name__ == '__main__':
 
     create_data(
         name='CoordToCnc',
-        rot_angles=[],
+        rot_angles=[-9, 9, 18],
         k_neigh=args.augment_data,
         path_input=args.data_source,
         path_label=args.labels_source,

@@ -1,13 +1,14 @@
+
+
+import time
+from itertools import product
+
 import torch
 import wandb
 import yaml
-from itertools import product
 
-from src.train import GNN
 from src.datasets import split_data
-
-import time
-
+from src.train import GNN
 
 # following is for book-keeping of experiments i.e. naming for wandb
 MODEL_TYPE = 'Equiv_GIN_Gaussian2'

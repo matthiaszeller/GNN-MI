@@ -1,10 +1,13 @@
+
+
+from itertools import product
+
 import torch
 import wandb
 import yaml
-from itertools import product
 
-from src.train import GNN
 from src.datasets import split_data
+from src.train import GNN
 
 """TODO:
     3) make model saving optional

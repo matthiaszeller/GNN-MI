@@ -1,8 +1,11 @@
+
+
 import numpy as np
 import torch
-from torch_geometric.loader import DataLoader
 import wandb
 from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix, f1_score
+from torch_geometric.loader import DataLoader
+
 from .models import NoPhysicsGnn, EquivNoPhys
 
 

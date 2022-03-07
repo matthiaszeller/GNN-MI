@@ -1,22 +1,21 @@
-import logging
-import os
+
+
 import argparse
+import math
+import os
 
 import numpy as np
-import vtk
-from vtk.util.numpy_support import vtk_to_numpy
-import pickle5 as pickle  # to work with python3.6.5
-# import pickle
 import pandas as pd
+import pickle5 as pickle  # to work with python3.6.5
 import torch
-import math
-
+import vtk
 from torch_geometric.data import Data
+from vtk.util.numpy_support import vtk_to_numpy
+
 from data_augmentation import create_knn_data
 from setup import *
 
 NAME_TO_INT = {'LAD': 0, 'LCX': 1, 'RCA': 2}
-
 
 def read_labels(filename):
     """

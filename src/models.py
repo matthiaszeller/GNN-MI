@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import torch_geometric.nn as nn
 from torch.nn import Linear, ELU, ReLU, Dropout, BatchNorm1d, Sequential, Softmax
 
-from src.egnn import E_GCL
+from egnn import E_GCL
 
 
 class GnnBaseline(torch.nn.Module):

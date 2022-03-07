@@ -9,7 +9,7 @@ import torch
 from sklearn.model_selection import train_test_split, KFold
 from torch_geometric.data import Dataset
 
-from src import setup
+import setup
 
 
 def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):

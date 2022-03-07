@@ -7,13 +7,13 @@ import torch
 import wandb
 import yaml
 
-from src import setup
-from src.datasets import split_data
-from src.setup import WANDB_SETTINGS
-from src.train import GNN
+import setup
+from datasets import split_data
+from setup import WANDB_SETTINGS
+from train import GNN
 
 # following is for book-keeping of experiments i.e. naming for wandb
-from src.utils import grid_search
+from utils import grid_search
 
 # MODEL_TYPE = 'Equiv_GIN_Gaussian2'# TODO get rid of all those things
 # Options include: 'Equiv_FullyCon_3CVoutof10' # 'noAugEdge'

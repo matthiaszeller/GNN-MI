@@ -1,12 +1,9 @@
-import torch
 from torch.nn import Linear, ELU, ReLU, Dropout, BatchNorm1d, Sequential, Softmax
 import torch_geometric.nn as nn
-import torch.nn.functional as F
 
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
-from util.egnn import E_GCL
+from src.egnn import E_GCL
 
 class GnnBaseline(torch.nn.Module):
     """

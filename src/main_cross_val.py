@@ -3,8 +3,8 @@ import wandb
 import yaml
 from itertools import product
 
-from util.train import GNN
-from datasets import split_data
+from src.train import GNN
+from src.datasets import split_data
 
 import time
 
@@ -148,7 +148,7 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
 
 print("grid search starting .......")
 # following file contains all hyperparameters to try in the grid search
-yaml_file = open("hyper_params.yaml")
+yaml_file = open("../experiments/hyper_params.yaml")
 # load hyperparameters as dictionary
 arg_dic = yaml.load(yaml_file, Loader=yaml.FullLoader)
 keys = arg_dic.keys()

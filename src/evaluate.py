@@ -3,8 +3,8 @@ import wandb
 import yaml
 from itertools import product
 
-from util.train import GNN
-from datasets import split_data
+from src.train import GNN
+from src.datasets import split_data
 
 """TODO:
     3) make model saving optional

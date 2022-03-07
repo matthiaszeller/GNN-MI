@@ -83,7 +83,7 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
 
         # set model hyperparameters
         optim_param = {
-            'name': args['optim'],
+            'optimizer': args['optim'],
             'lr': args['optim_lr'],
             'momentum': args['optim_momentum'],
         }
@@ -94,7 +94,6 @@ def run_cross_val(split_list, args, test_set, run_dic=None):
 
         # initialize the model
         gnn = GNN(
-            args['path_model'] + args['model'],
             model_param,
             train_set,
             val_set,

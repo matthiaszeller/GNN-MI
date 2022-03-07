@@ -55,7 +55,7 @@ for instance in product(*values):
 
         # set model parameters
         optim_param = {
-            'name': config['optim'],
+            'optimizer': config['optim'],
             'lr': config['optim_lr'],
             'momentum': config['optim_momentum'],
         }
@@ -66,7 +66,6 @@ for instance in product(*values):
 
         # initialize model
         gnn = GNN(
-                config['path_model'] + config['model'],
                 model_param,
                 train_set,
                 val_set,

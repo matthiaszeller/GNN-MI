@@ -9,6 +9,8 @@ import torch
 from sklearn.model_selection import train_test_split, KFold
 from torch_geometric.data import Dataset
 
+from src import setup
+
 
 def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
     """
@@ -30,8 +32,9 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
     # TODO: be convinced that this choice is the right one
     # (this ensures/facilitates that we don'T train on
     # augmented data from valid/test set.)
+    _, path_output = setup.get_data_paths()
 
-    with open('../data/patient_dict.pickle', 'rb') as f:
+    with open(path_output.joinpath('patient_dict.pickle'), 'rb') as f:
         data_dict = pickle.load(f)
     patients = np.array(list(data_dict.keys()))  # names of patients
     patients = np.sort(patients)  # Safety, for seed to make sense

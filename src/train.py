@@ -25,7 +25,6 @@ class GNN:
     # Good luck! :) 
     def __init__(
             self,
-            model_path,
             model_param,
             train_set,
             valid_set,
@@ -39,7 +38,6 @@ class GNN:
         self.device = torch.device(dev)
         print("Using device:", self.device)
         self.model_name = model_param['name']
-        self.model_path = model_path
         #self.ratio = 1.0  # only useful for phys models
 
         if self.model_name == 'NoPhysicsGnn':
@@ -63,7 +61,7 @@ class GNN:
         self.val_loader = DataLoader(valid_set, batch_size, shuffle=False)
         self.test_loader = DataLoader(test_set, batch_size, shuffle=False)
 
-        if optim_param['name'] == 'Adam':
+        if optim_param['optimizer'] == 'Adam':
             self.optimizer = torch.optim.Adam(self.model.parameters(),
                                               lr=optim_param['lr'])
         else:

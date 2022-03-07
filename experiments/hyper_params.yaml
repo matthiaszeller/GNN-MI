@@ -51,8 +51,6 @@ seed:
     - 0
 path_data:
     - "../data/CoordToCncGaussian2" # Options include: 10RandRot_CoordToCnc  4RotCoordToCnc  CoordToCnc  CoordToCnc_KNN5
-path_model:
-    - "./experiments/util/"
 batch_size:
     - 1
       #- 10

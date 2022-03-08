@@ -148,11 +148,12 @@ def main():
         logging.info(f'grid search iter {count}, config = {config}')
         # split data as test set and then cross val list with
         # elements of format (train, valid)
-        _, split_list = split_data(path=setup.get_dataset_path(config['dataset']),
+        _, split_list = split_data(path=setup.get_dataset_path(config['dataset']['name']),
                                    num_node_feat=3,
                                    cv=True,
                                    k_cross=10,
-                                   seed=config['seed'])
+                                   seed=config['seed'],
+                                   in_memory=config['dataset']['in_memory'])
         config_name = f'config-{count}'
         run_cross_val(split_list=split_list,
                       args=config,

@@ -66,7 +66,6 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
                                            val_patients,
                                            train='val',
                                            num_node_feat=num_node_feat))]
-        return test_set, split_list
     else: # no cross val
         train_patients, val_patients = train_test_split(pretrain_patients,
                                                         test_size=0.1,
@@ -82,7 +81,9 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
                                       train='val',
                                       num_node_feat=num_node_feat))]
         # here split list has length 1, just to imitate the cross val format
-        return test_set, split_list
+
+    logging.info(f'split_data (test_set, split_list) = ({test_set}, {split_list})')
+    return test_set, split_list
 
 # TODO: delete below
 # def train_test_for_eval(path, num_node_feat=3, seed=0):
@@ -98,7 +99,7 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
 
 
 class PatientDataset(TorchDataset):
-    def __init__(self, path, patients, train='train', num_node_feat=3, load_ram=True):
+    def __init__(self, path, patients, train='train', num_node_feat=3, in_memory=True):
         """
         Creates a PatientDataset child object which works with Dataloaders
         for batching.
@@ -112,7 +113,7 @@ class PatientDataset(TorchDataset):
                 the augmented data points should eb included in the
                 PatientDataset (they are included only for training)
         num_node_feat : int, number of features oper node.
-        load_ram: bool, whether to load dataset into memory
+        in_memory: bool, whether to load all the dataset into memory, otherwise load whenever needed
         """
         super(PatientDataset, self).__init__()
         self.path = path
@@ -137,12 +138,15 @@ class PatientDataset(TorchDataset):
         self.num_node_feat = num_node_feat  # 3 for CoordToCnc
         self.length = len(self.patients)
 
-        self.load_ram = load_ram
-        if self.load_ram:
+        self.in_memory = in_memory
+        if self.in_memory:
             logging.info(f'loading {train} patients into memory')
             self._data = [
                 self._load_from_disk(i) for i in range(self.length)
             ]
+        else:
+            # TODO better handle this case
+            logging.warning('PatientDataset.in_memory set to False, this is highly inefficient')
 
     @property
     def raw_file_names(self) -> Union[str, List[str], Tuple]:
@@ -172,7 +176,7 @@ class PatientDataset(TorchDataset):
         return self.length
 
     def get(self, idx):
-        if self.load_ram:
+        if self.in_memory:
             return self._data[idx]
         return self._load_from_disk(idx)
 
@@ -180,6 +184,9 @@ class PatientDataset(TorchDataset):
         logging.debug(f'loading patient {self.patients[idx]}')
         data = torch.load(os.path.join(self.path, self.patients[idx]))
         return data
+
+    def __repr__(self):
+        return f'PatientDataset({len(self)}, type={self.train}, in_memory={self.in_memory})'
 
 
 if __name__ == '__main__':

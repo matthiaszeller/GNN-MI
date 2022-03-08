@@ -1,21 +1,22 @@
-
-
+import logging
 import os
+from pathlib import Path
 from typing import Union, List, Tuple
 
 import numpy as np
 import pickle5 as pickle  # TODO: is this necessary? What does this change?
 import torch
 from sklearn.model_selection import train_test_split, KFold
-from torch_geometric.data import Dataset
+from torch_geometric.data import Dataset as TorchDataset
 
 import setup
+from create_data import parse_data_file_name
 
 
-def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
+def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
     """
     Splits the data fetched from `path` folder.
-    Returns train, valid, test split, each are DataSet objects.
+    Returns train, valid, test split, each are PatientDataset objects.
     A design choice is that the split is done at the level of patients,
     and not at the level of arteries.
 
@@ -28,6 +29,7 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
               if cv above is False, this does not impact the code
     seed : int, controls random state. Ensuring same train val and
            test split across experiments
+    kwargs: passed to PatientDataset
     """
     # TODO: be convinced that this choice is the right one
     # (this ensures/facilitates that we don'T train on
@@ -44,10 +46,10 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
                                                         test_size=0.1,
                                                         shuffle=True,
                                                         random_state=seed)
-    test_set = DataSet(path,
-                       test_patients,
-                       train='test',
-                       num_node_feat=num_node_feat)
+    test_set = PatientDataset(path,
+                              test_patients,
+                              train='test',
+                              num_node_feat=num_node_feat)
     if cv:  # cross val
         kf = KFold(k_cross, shuffle=True, random_state=seed)
         split_list = []
@@ -56,14 +58,14 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
             train_patients = patients[train_index]
             val_patients = patients[val_index]
             # list of (train_set, val_set) tuple
-            split_list += [(DataSet(path,
-                                    train_patients,
-                                    train='train',
-                                    num_node_feat=num_node_feat),
-                            DataSet(path,
-                                    val_patients,
-                                    train='val',
-                                    num_node_feat=num_node_feat))]
+            split_list += [(PatientDataset(path,
+                                           train_patients,
+                                           train='train',
+                                           num_node_feat=num_node_feat),
+                            PatientDataset(path,
+                                           val_patients,
+                                           train='val',
+                                           num_node_feat=num_node_feat))]
         return test_set, split_list
     else: # no cross val
         train_patients, val_patients = train_test_split(pretrain_patients,
@@ -71,14 +73,14 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
                                                         shuffle=True,
                                                         random_state=seed)
         # list of (train_set, val_set) tuples
-        split_list = [(DataSet(path,
-                               train_patients,
-                               train='train',
-                               num_node_feat=num_node_feat),
-                       DataSet(path,
-                               val_patients,
-                               train='val',
-                               num_node_feat=num_node_feat))]
+        split_list = [(PatientDataset(path,
+                                      train_patients,
+                                      train='train',
+                                      num_node_feat=num_node_feat),
+                       PatientDataset(path,
+                                      val_patients,
+                                      train='val',
+                                      num_node_feat=num_node_feat))]
         # here split list has length 1, just to imitate the cross val format
         return test_set, split_list
 
@@ -90,50 +92,57 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0):
 #     patients = np.sort(patients) # for the seed thing to make sense. If the order change, the idnexing changes...
 
 #     train_patients, test_patients = train_test_split(patients, test_size = 0.1, shuffle=True, random_state=seed)
-#     test_set = DataSet(path, test_patients, train='test', num_node_feat=num_node_feat)
-#     train_set = DataSet(path, train_patients, train='train', num_node_feat=num_node_feat)
+#     test_set = PatientDataset(path, test_patients, train='test', num_node_feat=num_node_feat)
+#     train_set = PatientDataset(path, train_patients, train='train', num_node_feat=num_node_feat)
 #     return train_set, test_set
 
 
-class DataSet(Dataset):
-    def __init__(self, path, patients, train='train', num_node_feat=3):
+class PatientDataset(TorchDataset):
+    def __init__(self, path, patients, train='train', num_node_feat=3, load_ram=True):
         """
-        Creates a Dataset child object which works with Dataloaders
+        Creates a PatientDataset child object which works with Dataloaders
         for batching.
 
         Parameters:
         -----------
         path : string indicating where the folder in which the data is
-        patients : list of strings, which are the data points to
-                   consider puting in the DataSet
+        patients : list of strings, which are the patient ids to
+                   consider putting in the PatientDataset
         train : string, either 'train', 'val' or 'test' indicating if
                 the augmented data points should eb included in the
-                DataSet (they are included only for training)
+                PatientDataset (they are included only for training)
         num_node_feat : int, number of features oper node.
+        load_ram: bool, whether to load dataset into memory
         """
-        super(DataSet, self).__init__()
+        super(PatientDataset, self).__init__()
         self.path = path
-        self.data = []
+        self.patients = []
         for name in os.listdir(self.path):
-            # check if patient is in appropriate set: training, val, test
-            if name[:6] not in patients:
+            is_patient, patient_id, is_augmented = parse_data_file_name(name)
+            if is_patient is False:
                 continue
+            # check if patient is in appropriate set: training, val, test
             # the following conditionals apply only to testing/val data,
             # and makes sure the augmented data is not included in them
-            if name[-4] == '1':  # and train != 'train':
+            if is_augmented and train != 'train':
                 continue
-            if name[-9:-6] == 'rot' and name[-4] != '0' and train != 'train':
-                continue
-            if name[-7:-4] == 'KNN' and train != 'train':
-                continue
-            if name[-9:-4] == 'NOISE' and train != 'train':
-                continue
-            self.data.append(name)  # name is name of file
+            # Trying to enforce default-deny
+            # TODO: this is still some bad design, but trying to make things work and ensure backward compatibility
+            if patient_id in patients:
+                self.patients.append(name)  # name is name of file
+
         self.train = train
-        self.data = np.sort(np.array(self.data))  # TODO: necessary?
+        self.patients = np.sort(np.array(self.patients))  # TODO: necessary?
         self.num_classes = 2  # Culprit, non-culprit
         self.num_node_feat = num_node_feat  # 3 for CoordToCnc
-        self.length = len(self.data)
+        self.length = len(self.patients)
+
+        self.load_ram = load_ram
+        if self.load_ram:
+            logging.info(f'loading {train} patients into memory')
+            self._data = [
+                self._load_from_disk(i) for i in range(self.length)
+            ]
 
     @property
     def raw_file_names(self) -> Union[str, List[str], Tuple]:
@@ -160,9 +169,22 @@ class DataSet(Dataset):
         return self.num_node_feat
 
     def len(self):
-        # print("length is called")
         return self.length
 
     def get(self, idx):
-        data = torch.load(os.path.join(self.path, self.data[idx]))
+        if self.load_ram:
+            return self._data[idx]
+        return self._load_from_disk(idx)
+
+    def _load_from_disk(self, idx: int):
+        logging.debug(f'loading patient {self.patients[idx]}')
+        data = torch.load(os.path.join(self.path, self.patients[idx]))
         return data
+
+
+if __name__ == '__main__':
+    path_in, path_out = setup.get_data_paths()
+    path_dataset = path_out.joinpath('CoordToCnc_KNN5')
+    test_split, split_list = split_data(path_dataset)
+
+

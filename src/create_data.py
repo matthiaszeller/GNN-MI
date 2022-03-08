@@ -18,6 +18,41 @@ from setup import *
 NAME_TO_INT = {'LAD': 0, 'LCX': 1, 'RCA': 2}
 
 
+def parse_data_file_name(file):
+    """
+    File name is assumed to be structured into "parts" separated by underscore `_`:
+        <part1>_<part2>*.pt
+    The first part is the patient id, the second part is the artery type.
+    The next parts are optional and may describe data augmentation.
+    If one of the following patterns *is in* any optional part (i.e. after part 1 and 2, if any):
+        - rot
+        - KNN
+        - NOISE
+    Matching is case-INsensitive.
+    @param file: str, file name or file path
+    @returns: is_patient: bool, patient_id: str, is_augmented: bool
+              patient id and whether the file is original or augmented data
+    """
+    if Path(file).suffix != '.pt':
+        return False, None, None
+
+    # File name without (last) suffix
+    fname = Path(file).stem
+    # Collect parts
+    patient_id, artery, *optional = fname.split('_')
+    # Enforce backward compatibility, may probably be removed though
+    if len(patient_id) != 6:
+        return False, None, None
+    # Find if augmented
+    is_augmented = False
+    for opt_part in optional:
+        if any(pattern in opt_part.lower() for pattern in ('knn', 'noise', 'rot')):
+            is_augmented = True
+            break
+
+    return True, patient_id, is_augmented
+
+
 def read_labels(filename):
     """
     Creates list of culprit segments

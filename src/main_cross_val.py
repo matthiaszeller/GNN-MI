@@ -30,11 +30,11 @@ def run_cross_val(split_list, args, config_name):
 
     Parameters:
     ------------
-    split_list : list of tuples of DataSet objects. Length of list is nb of
+    split_list : list of tuples of PatientDataset objects. Length of list is nb of
     runs in the cross validation. The first entry of the tuple is the
     training set, the second is the validation set.
 
-    test_set :  DataSet object, only used to print the elements in the test
+    test_set :  PatientDataset object, only used to print the elements in the test
     set, as a sanity check. TODO: make optional
 
     args : dictionary of arguments to feed into the model. Check out the

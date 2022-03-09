@@ -137,7 +137,7 @@ class PatientDataset(TorchDataset):
                 self.patients.append(name)  # name is name of file
 
         self.train = train
-        self.patients = np.sort(np.array(self.patients))  # TODO: necessary?
+        self.patients = sorted(self.patients)  # TODO: necessary?
         self.num_classes = 2  # Culprit, non-culprit
         self.num_node_feat = num_node_feat  # 3 for CoordToCnc
         self.length = len(self.patients)
@@ -185,9 +185,13 @@ class PatientDataset(TorchDataset):
         return self._load_from_disk(idx)
 
     def _load_from_disk(self, idx: int):
-        logging.debug(f'loading patient {self.patients[idx]}')
+        #logging.debug(f'loading patient {self.patients[idx]}')
         data = torch.load(os.path.join(self.path, self.patients[idx]))
         return data
+
+    def get_patient(self, patient: str):
+        idx = self.patients.index(patient)
+        return self.get(idx)
 
     def __repr__(self):
         return f'PatientDataset({len(self)}, type={self.train}, in_memory={self.in_memory})'

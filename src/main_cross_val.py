@@ -69,8 +69,8 @@ def run_cross_val(split_list, args, config_name):
 
         # print intermediate things for sanity check
         logging.info(f'KFold CV {i + 1}/{n_folds}')
-        logging.info(f'training set, length {len(train_set)}, {train_set.data}')
-        logging.info(f'validation set, length {len(val_set)}, {val_set.data}')
+        logging.info(f'training set, length {len(train_set)}, {train_set.patients}')
+        logging.info(f'validation set, length {len(val_set)}, {val_set.patients}')
 
         # set model hyperparameters
         optim_param = {

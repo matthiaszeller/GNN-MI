@@ -13,6 +13,9 @@ import setup
 from create_data import parse_data_file_name
 
 
+# TODO: currently doing Kfold cross validation => loading each (train or val) file K times, pretty bad in terms of memory
+
+
 def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
     """
     Splits the data fetched from `path` folder.

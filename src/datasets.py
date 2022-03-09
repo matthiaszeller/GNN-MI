@@ -70,6 +70,7 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
                                            train='val',
                                            num_node_feat=num_node_feat))]
     else: # no cross val
+        # TODO evaluation -> no validation set
         train_patients, val_patients = train_test_split(pretrain_patients,
                                                         test_size=0.1,
                                                         shuffle=True,

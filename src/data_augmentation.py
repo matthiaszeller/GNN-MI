@@ -1,6 +1,7 @@
 
 
 import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -55,17 +56,26 @@ def edge_diffusion(A, alpha):
     return adjacency_matrix_to_edge_list(A_modified)
 
 
-def gaussian_noise(path_data="data/CoordToCnc",
-                   save_path="data/CoordToCncGaussian2", k=2,
-                   mean=0, std=0.1):
+def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
     """Augments the data by adding Gaussian noise to the coordinate data.
-    First fetches the data as torch tensors from path_data, augments it k
-    times, and then saves it into save_path. For recommended usage: save_path
-    is empty, and path_data contains only original Coord data."""
-    for seg in os.listdir(path_data):
-        data = torch.load(path_data+"/"+seg)
-        torch.save(data, save_path+"/"+seg)
+    Copies original files from path_data into save_path, and additionally create
+    k files per original file with gaussian noise added to coordinates.
+    save_path must not exist.
+    """
+    path_data, save_path = Path(path_data), Path(save_path)
+    if save_path.exists():
+        raise ValueError('save path must not exist and will be created')
+
+    save_path.mkdir()
+    for file_path in path_data.glob('*.pt'):
+        data = torch.load(file_path)
+        # Copy original file into destination
+        file_name = file_path.name
+        torch.save(data, save_path.joinpath(file_name))
+        # Augment
         for i in range(1, k+1):
-            noise = torch.normal(mean=torch.ones(data.x.shape)*mean, std=0.1)
-            data.x = data.x + noise
-            torch.save(data, save_path+"/"+seg[:-3]+"NOISE"+str(i)+seg[-3:])
+            noise = torch.normal(mean=torch.ones(data.x.shape)*mean, std=std)
+            new_data = data.clone()
+            new_data += noise
+            file_name = f'{file_path.stem}_NOISE{i}{file_path.suffix}'
+            torch.save(new_data, save_path.joinpath(file_name))

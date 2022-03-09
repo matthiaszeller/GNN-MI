@@ -1,5 +1,4 @@
-
-
+import logging
 import os
 from pathlib import Path
 
@@ -7,6 +6,8 @@ import numpy as np
 import torch
 from scipy.spatial import distance_matrix
 from vtk.util.numpy_support import vtk_to_numpy
+
+import setup
 
 
 def adjacency_matrix_to_edge_list(A):
@@ -56,6 +57,7 @@ def edge_diffusion(A, alpha):
     return adjacency_matrix_to_edge_list(A_modified)
 
 
+@setup.arg_logger
 def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
     """Augments the data by adding Gaussian noise to the coordinate data.
     Copies original files from path_data into save_path, and additionally create
@@ -72,6 +74,7 @@ def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
         # Copy original file into destination
         file_name = file_path.name
         torch.save(data, save_path.joinpath(file_name))
+        logging.info(f'copied {str(file_path)} to {save_path.joinpath(file_name)}')
         # Augment
         for i in range(1, k+1):
             noise = torch.normal(mean=torch.ones(data.x.shape)*mean, std=std)
@@ -79,3 +82,5 @@ def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
             new_data += noise
             file_name = f'{file_path.stem}_NOISE{i}{file_path.suffix}'
             torch.save(new_data, save_path.joinpath(file_name))
+            logging.info(f'generated gaussian augmented data file {save_path.joinpath(file_name)}')
+

@@ -6,7 +6,7 @@ import wandb
 from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix, f1_score
 from torch_geometric.loader import DataLoader
 
-from models import NoPhysicsGnn, EquivNoPhys
+from models import NoPhysicsGnn, EGNN
 
 
 class GNN:
@@ -47,6 +47,7 @@ class GNN:
         self.model_type = model_param['type']
         self.ratio = 1.0  # only useful for phys models
 
+        num_node_features = train_set.x.shape[1]
         if self.model_type == 'NoPhysicsGnn':
             self.physics = False
             self.automatic_update = False
@@ -54,10 +55,10 @@ class GNN:
         elif self.model_type == 'Equiv':
             self.physics = False
             self.automatic_update = False
-            self.model = EquivNoPhys(train_set,
-                                     num_gin=args['num_gin'],
-                                     num_equiv=args['num_equiv'])
-    #                                 , args['n_layers'])
+            self.model = EGNN(num_classes=train_set.num_classes,
+                              num_node_features=num_node_features,
+                              num_equiv=args['num_equiv'],
+                              num_gin=args['num_gin'])
         else:
             raise ValueError('unrecognized model type')
 
@@ -90,7 +91,7 @@ class GNN:
         y_true : np.array with labels
         """
         accuracy = accuracy_score(y_true, y_pred)
-        # tp/(tp + fp) i.e. fracttion of right positively labelled guesses
+        # tp/(tp + fp) i.e. fraction of right positively labelled guesses
         precision = precision_score(y_true, y_pred, zero_division=0)
         # tp / (tp + fn) i.e. fraction of rightly guessed CULPRITS
         recall = recall_score(y_true, y_pred)
@@ -109,6 +110,7 @@ class GNN:
 
         cnc = data.y
         cnc_pred = self.model(data.x,
+                              data.coord,
                               data.edge_index,
                               data.batch,
                               data.segment)
@@ -139,16 +141,19 @@ class GNN:
             train_loss_cnc = running_loss_cnc / len(self.train_loader.dataset)
             (acc, prec, rec,
              sens, spec, f1score) = self.calculate_metrics(y_pred, y_true)
+            # TODO add step so that train & eval are aligned
             run.log({
-                'ratio': self.ratio,
-                'train_accuracy': acc,
-                'train_precision': prec,
-                'train_recall': rec,
-                'train_sensitivity': sens,
-                'train_specificity': spec,
-                'train_f1score': f1score,
-                'train_loss_graph': train_loss_cnc
-            })
+                'train': {
+                    'ratio': self.ratio,
+                    'train_accuracy': acc,
+                    'train_precision': prec,
+                    'train_recall': rec,
+                    'train_sensitivity': sens,
+                    'train_specificity': spec,
+                    'train_f1score': f1score,
+                    'train_loss_graph': train_loss_cnc
+                }
+            }, commit=False) # rather commit at evaluation for performance
 
             self.model.eval()
             # val score:
@@ -195,13 +200,16 @@ class GNN:
         val_loss = running_loss / len(self.val_loader.dataset)
         (acc, prec, rec, sensitivity,
          specificity, f1_score) = self.calculate_metrics(y_pred, y_true)
+
         run.log({
-            prefix + '_accuracy': acc,
-            prefix + '_precision': prec,
-            prefix + '_recall': rec,
-            prefix + '_sensitivity': sensitivity,
-            prefix + '_specificity': specificity,
-            prefix + '_f1score': f1_score,
-            prefix + '_loss_graph': val_loss_cnc
+            prefix: {
+                prefix + '_accuracy': acc,
+                prefix + '_precision': prec,
+                prefix + '_recall': rec,
+                prefix + '_sensitivity': sensitivity,
+                prefix + '_specificity': specificity,
+                prefix + '_f1score': f1_score,
+                prefix + '_loss_graph': val_loss_cnc
+            }
         })
         return acc, prec, rec, sensitivity, specificity, f1_score, val_loss

@@ -173,8 +173,16 @@ def create_mesh_data(surface, div=False, coord=False):
     return data
 
 
+@arg_logger
 def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
-    logging.info(f'running create_data(), name={name}, k_neigh={k_neigh}, rot_angles={rot_angles}')
+    """
+    Create .pt files from .vtk files. Each .pt file is a serialized torch_geometric.data.Data object with attributes:
+        x: node features, size n_nodes x n_features (n_features might be zero)
+        coord: node coordinates, size n_nodes x 3
+        g_x: graph features
+        edge_index: adjacency list, size 2 x n_nodes
+        y: output culprit/non culprit, size n_nodes
+    """
     # Initialize writing path
     savepath = path_write.joinpath(name)
     if not savepath.exists():
@@ -204,18 +212,18 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
             culprit = 1 if pt_seg in culprits else 0
             if name == 'TsviPlusCnc':
                 tsvi = seg_to_tsvi[pt_seg]
-            seg = pt_seg[-3:]  # LAD, RCA or LCX
+            seg = pt_seg[-3:]  # LAD, RCA or LCX # TODO how this is done
             # read data
             surface = read_poly_data(path_input + '/' + pt_seg + '_WSSMag.vtp')
             # get points of surface
-            pos = torch.from_numpy(
+            coord = torch.from_numpy(
                 vtk_to_numpy(
                     surface.GetPoints()
                            .GetData()
                 )
             ).type(torch.FloatTensor)
 
-            num_nodes = len(pos)
+            num_nodes = len(coord)
             edges = get_edge_index(surface)
             edge_index = torch.from_numpy(
                 edges.transpose()
@@ -223,7 +231,9 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
 
             if name == 'CoordToCnc':
                 y = culprit
-                segment_data = vtk_to_numpy(surface.GetPoints().GetData())
+                # No node features in this case
+                segment_data = torch.empty((num_nodes, 0))
+                #segment_data = vtk_to_numpy(surface.GetPoints().GetData())
             elif name == 'WssToCnc':
                 y = culprit
                 segment_data = create_mesh_data(surface, div=True, coord=False)
@@ -240,28 +250,28 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
             elif name == 'TsviPlusCnc':
                 segment_data = vtk_to_numpy(surface.GetPoints().GetData())
                 y = torch.tensor([culprit, tsvi], dtype=torch.float)
-
-            segment_data = torch.from_numpy(segment_data).type(torch.FloatTensor)
-            data = Data(x=segment_data,
-                        edge_index=edge_index,
-                        y=y,
-                        pos=pos,  # TODO: replace by torch.tensor??
-                        segment=NAME_TO_INT[seg])
-            path_file = savepath.joinpath(pt_seg + '.pt')
-            if path_file.exists():
-                logging.info(f'file already exists {str(path_file)}')
             else:
-                logging.info(f'saving data in file {str(path_file)}')
-                torch.save(data, path_file)
+                raise ValueError
+
+            if isinstance(segment_data, np.ndarray):
+                segment_data = torch.from_numpy(segment_data).type(torch.FloatTensor)
+            data = Data(x=segment_data,
+                        coord=coord,
+                        g_x=NAME_TO_INT[seg],
+                        edge_index=edge_index,
+                        y=y)
+            path_file = savepath.joinpath(pt_seg + '.pt')
+            logging.info(f'saving data in file {str(path_file)}')
+            torch.save(data, path_file)
 
             # k_neighbours data aug:
             if k_neigh != 0:
                 edges = create_knn_data(surface, k_neigh)
                 data = Data(x=segment_data,
+                            coord=coord,
+                            g_x=NAME_TO_INT[seg],
                             edge_index=edges,
-                            y=y,
-                            pos=pos,
-                            segment=NAME_TO_INT[seg])
+                            y=y)
 
                 path_file = savepath.joinpath(f'{pt_seg}_KNN{k_neigh}.pt')
                 logging.info(f'saving KNN-augmented data in file {str(path_file)}')
@@ -274,14 +284,14 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                                      -np.sin(math.radians(angle))],
                                     [0, np.sin(math.radians(angle)),
                                      np.cos(math.radians(angle))]]).float()
-                segment_data_rot = torch.transpose(
-                                     mat@torch.transpose(segment_data, 0, 1),
-                                     0, 1)
-                data = Data(x=segment_data_rot,
+                coord = torch.transpose(
+                    mat@torch.transpose(coord, 0, 1), 0, 1
+                )
+                data = Data(x=segment_data,
+                            coord=coord,
+                            g_x=NAME_TO_INT[seg],
                             edge_index=edge_index,
-                            y=y,
-                            pos=pos,
-                            segment=NAME_TO_INT[seg])
+                            y=y)
                 path_file = savepath.joinpath(f'{pt_seg}_rot{angle:03d}.pt')
                 logging.info(f'saving rotation-augmented data in file {str(path_file)}')
                 torch.save(data, path_file)
@@ -294,26 +304,26 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--dataset_name',
+        '-n', '--dataset_name',
         type=str,
         help='name of dataset to be created',
         default='WssToCnc',
         choices=['CoordToCnc', 'WssToCnc', 'WssPlusCnc', 'TsviPlusCnc']
     )
     parser.add_argument(
-        '--augment_data',
+        '-k', '--augment_data',
         type=int,
         help='number of neighbours used for KNN',
         default=0  # used to be 5!
     )
     parser.add_argument(
-        '--data_source',
+        '-s', '--data_source',
         type=str,
         help='path to raw data',
         default=str(path_data_in.joinpath('CFD/ClinicalCFD/MagnitudeClinical'))
     )
     parser.add_argument(
-        '--labels_source',
+        '-l', '--labels_source',
         type=str,
         help='path to data label',
         default=str(path_data_in.joinpath('CFD/labels/WSSdescriptors_AvgValues.xlsx'))
@@ -321,8 +331,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     create_data(
-        name='CoordToCnc',
-        rot_angles=[-9, 9, 18],
+        name=args.dataset_name,
+        rot_angles=[-18, -9, 9, 18],
         k_neigh=args.augment_data,
         path_input=args.data_source,
         path_label=args.labels_source,

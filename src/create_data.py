@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 import pandas as pd
-import pickle5 as pickle  # to work with python3.6.5
+import pickle
 import torch
 import vtk
 from torch_geometric.data import Data

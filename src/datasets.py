@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Union, List, Tuple
 
 import numpy as np
-import pickle5 as pickle  # TODO: is this necessary? What does this change?
+import pickle
 import torch
 from sklearn.model_selection import train_test_split, KFold
 from torch_geometric.data import Dataset as TorchDataset

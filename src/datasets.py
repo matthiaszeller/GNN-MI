@@ -140,8 +140,12 @@ class PatientDataset(TorchDataset):
             self._data = [
                 self._load_from_disk(i) for i in range(self.length)
             ]
+            # TODO if in_memory False, this sanity check isn't done anywhere else and error is really hard to debug
+            if self._data[0].x.shape[1] != self.num_node_features:
+                raise ValueError
         else:
             # TODO better handle this case
+            # TODO chekc above comment about sanity check and num_node_features
             logging.warning('PatientDataset.in_memory set to False, this is highly inefficient')
 
     @property

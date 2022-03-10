@@ -65,6 +65,8 @@ class GNN:
 
         self.model.to(self.device)
 
+        # Debugging
+        logging.debug(f'Samples from train, val, test sets:\n{train_set[0]}\n{valid_set[0]}\n{test_set[0]}')
         # initialize data loader for batching
         self.train_loader = DataLoader(train_set, batch_size, shuffle=True)
         self.val_loader = DataLoader(valid_set, batch_size, shuffle=False)
@@ -112,9 +114,9 @@ class GNN:
         cnc = data.y
         cnc_pred = self.model(data.x,
                               data.coord,
+                              data.g_x,
                               data.edge_index,
-                              data.batch,
-                              data.segment)
+                              data.batch)
         loss = loss_cnc = self.criterion(cnc_pred, data.y)
         return loss, loss_cnc, cnc_pred, cnc
 

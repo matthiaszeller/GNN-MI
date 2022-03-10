@@ -41,7 +41,7 @@ if len(grid) != 1:
 
 config = grid[0]
 test_set, split_list = split_data(path=setup.get_dataset_path(config['dataset']['name']),
-                                  num_node_feat=config['dataset']['num_node_features'],
+                                  num_node_features=config['dataset']['num_node_features'],
                                   cv=True,
                                   k_cross=10, # TODO check with previous verison I made mistake
                                   seed=config['seed'])

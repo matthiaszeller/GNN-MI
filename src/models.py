@@ -102,10 +102,11 @@ class EGNN(GNNBase):
         # self.equiv5 = E_GCL(16, 16, 16, tanh=False)
         # self.equiv6 = E_GCL(16, 16, 16, tanh=False)
 
-        self.gin_layers = nn.Sequential('x, edge_index', [
-            (GINActivatedModule(16, 16, 16), 'x, edge_index -> x, edge_index')
-            for _ in range(num_gin)
-        ])
+        if self.num_gin > 0:
+            self.gin_layers = nn.Sequential('x, edge_index', [
+                (GINActivatedModule(16, 16, 16), 'x, edge_index -> x, edge_index')
+                for _ in range(num_gin)
+            ])
         # self.gin = self.get_GIN(16, 16, 16)
         # self.gin2 = self.get_GIN(16, 16, 16)
         # self.gin3 = self.get_GIN(16, 16, 16)
@@ -127,7 +128,8 @@ class EGNN(GNNBase):
         # TODO check node_attr vs h
         h, x, edge_attr = self.equiv(h0, edge_index, coord0)
 
-        h, _ = self.gin_layers(h, edge_index)
+        if self.num_gin > 0:
+            h, _ = self.gin_layers(h, edge_index)
         # for gin_layer in self.gin_layers:
         #     h = gin_layer(h, edge_index)
         #     h = F.elu(h, alpha=0.1)

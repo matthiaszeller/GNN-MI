@@ -1,4 +1,5 @@
 import logging
+from typing import Dict, Iterable
 
 import numpy as np
 import torch
@@ -6,6 +7,7 @@ import wandb
 from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix, f1_score
 from torch_geometric.loader import DataLoader
 
+from datasets import PatientDataset
 from models import NoPhysicsGnn, EGNN
 
 
@@ -32,14 +34,14 @@ class GNN:
     # Good luck! :) 
     def __init__(
             self,
-            model_param,
-            train_set,
-            valid_set,
-            test_set,
-            batch_size,
-            optim_param,
-            weight1,
-            args
+            model_param: Dict,
+            train_set: PatientDataset,
+            valid_set: PatientDataset,
+            test_set: PatientDataset,
+            batch_size: int,
+            optim_param: Dict,
+            weight1: Iterable,
+            args: Dict
     ):
         dev = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(dev)
@@ -47,7 +49,6 @@ class GNN:
         self.model_type = model_param['type']
         self.ratio = 1.0  # only useful for phys models
 
-        num_node_features = train_set.x.shape[1]
         if self.model_type == 'NoPhysicsGnn':
             self.physics = False
             self.automatic_update = False
@@ -56,7 +57,7 @@ class GNN:
             self.physics = False
             self.automatic_update = False
             self.model = EGNN(num_classes=train_set.num_classes,
-                              num_node_features=num_node_features,
+                              num_node_features=train_set.num_node_features,
                               num_equiv=args['num_equiv'],
                               num_gin=args['num_gin'])
         else:

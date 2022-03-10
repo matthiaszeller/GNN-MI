@@ -16,7 +16,7 @@ from create_data import parse_data_file_name
 # TODO: currently doing Kfold cross validation => loading each (train or val) file K times, pretty bad in terms of memory
 
 
-def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
+def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
     """
     Splits the data fetched from `path` folder.
     Returns train, valid, test split, each are PatientDataset objects.
@@ -26,7 +26,7 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
     Parameters:
     --------------
     path : string indicating what folder the data lives in
-    num_node_feat : int indicating how many features each node has
+    num_node_features : int indicating how many features each node has
     cv : bool to indicate if cross validation is performed
     k_cross : int, which indicates the number of folds in the k-fold
               if cv above is False, this does not impact the code
@@ -52,7 +52,8 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
     test_set = PatientDataset(path,
                               test_patients,
                               train='test',
-                              num_node_feat=num_node_feat)
+                              num_node_features=num_node_features,
+                              **kwargs)
     if cv:  # cross val
         kf = KFold(k_cross, shuffle=True, random_state=seed)
         split_list = []
@@ -64,13 +65,14 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
             split_list += [(PatientDataset(path,
                                            train_patients,
                                            train='train',
-                                           num_node_feat=num_node_feat),
+                                           num_node_features=num_node_features,
+                                           **kwargs),
                             PatientDataset(path,
                                            val_patients,
                                            train='val',
-                                           num_node_feat=num_node_feat))]
+                                           num_node_features=num_node_features,
+                                           **kwargs))]
     else: # no cross val
-        # TODO evaluation -> no validation set
         train_patients, val_patients = train_test_split(pretrain_patients,
                                                         test_size=0.1,
                                                         shuffle=True,
@@ -79,31 +81,21 @@ def split_data(path, num_node_feat=3, cv=False, k_cross=10, seed=0, **kwargs):
         split_list = [(PatientDataset(path,
                                       train_patients,
                                       train='train',
-                                      num_node_feat=num_node_feat),
+                                      num_node_features=num_node_features,
+                                      **kwargs),
                        PatientDataset(path,
                                       val_patients,
                                       train='val',
-                                      num_node_feat=num_node_feat))]
+                                      num_node_features=num_node_features,
+                                      **kwargs))]
         # here split list has length 1, just to imitate the cross val format
 
     logging.info(f'split_data (test_set, split_list) = ({test_set}, {split_list})')
     return test_set, split_list
 
-# TODO: delete below
-# def train_test_for_eval(path, num_node_feat=3, seed=0):
-#     with open('../data/patient_dict.pickle', 'rb') as f:
-#         data_dict = pickle.load(f)
-#     patients = np.array(list(data_dict.keys())) #names of patients TODO: Is this list ordered? Shoudl be For reproducibility.
-#     patients = np.sort(patients) # for the seed thing to make sense. If the order change, the idnexing changes...
-
-#     train_patients, test_patients = train_test_split(patients, test_size = 0.1, shuffle=True, random_state=seed)
-#     test_set = PatientDataset(path, test_patients, train='test', num_node_feat=num_node_feat)
-#     train_set = PatientDataset(path, train_patients, train='train', num_node_feat=num_node_feat)
-#     return train_set, test_set
-
 
 class PatientDataset(TorchDataset):
-    def __init__(self, path, patients, train='train', num_node_feat=3, in_memory=True):
+    def __init__(self, path, patients, train='train', num_node_features=3, in_memory=True):
         """
         Creates a PatientDataset child object which works with Dataloaders
         for batching.
@@ -116,7 +108,7 @@ class PatientDataset(TorchDataset):
         train : string, either 'train', 'val' or 'test' indicating if
                 the augmented data points should eb included in the
                 PatientDataset (they are included only for training)
-        num_node_feat : int, number of features oper node.
+        num_node_features : int, number of features per node.
         in_memory: bool, whether to load all the dataset into memory, otherwise load whenever needed
         """
         super(PatientDataset, self).__init__()
@@ -139,7 +131,7 @@ class PatientDataset(TorchDataset):
         self.train = train
         self.patients = sorted(self.patients)  # TODO: necessary?
         self.num_classes = 2  # Culprit, non-culprit
-        self.num_node_feat = num_node_feat  # 3 for CoordToCnc
+        self._num_node_features = num_node_features # 0 for CoordToCnc, 3 for CoordToCnc
         self.length = len(self.patients)
 
         self.in_memory = in_memory
@@ -174,7 +166,7 @@ class PatientDataset(TorchDataset):
 
     @property
     def num_node_features(self):
-        return self.num_node_feat
+        return self._num_node_features
 
     def len(self):
         return self.length

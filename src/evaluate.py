@@ -41,12 +41,11 @@ if len(grid) != 1:
 
 config = grid[0]
 test_set, split_list = split_data(path=setup.get_dataset_path(config['dataset']['name']),
-                                  num_node_feat=3,
+                                  num_node_feat=config['dataset']['num_node_features'],
                                   cv=True,
                                   k_cross=10, # TODO check with previous verison I made mistake
                                   seed=config['seed'])
 
-# TODO remake this, bad design, only one split
 # train on all split_list instances mimicing cross validation
 for count, (train_set, val_set) in enumerate(split_list):
     # group name differentiates from the other two

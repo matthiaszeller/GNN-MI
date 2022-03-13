@@ -89,7 +89,7 @@ def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
         # here split list has length 1, just to imitate the cross val format
 
     logging.info(f'split_data (test_set, split_list) = ({test_set}, {split_list})')
-    check_splits(test_split, split_list)
+    check_splits(test_set, split_list)
     return test_set, split_list
 
 

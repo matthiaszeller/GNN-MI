@@ -4,21 +4,12 @@ from pathlib import Path
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(module)s] [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler("logs.log"),
         logging.StreamHandler()
     ]
 )
-
-
-# Wandb parameters
-# Follow procedure on this webpage https://wandb.ai/quickstart/pytorch
-# and set the `project` and `entity` fields below
-WANDB_SETTINGS = {
-    'project': 'egnn-mi',
-    'entity': 'mazeller'
-}
 
 
 def get_project_root_path():
@@ -68,3 +59,16 @@ def arg_logger(fun):
     return inner
 
 
+# Wandb parameters
+# Follow procedure on this webpage https://wandb.ai/quickstart/pytorch
+# and set the `project` and `entity` fields below
+WANDB_PATH = get_project_root_path().joinpath('data/wandb_auto')
+if not WANDB_PATH.exists():
+    WANDB_PATH.mkdir()
+
+WANDB_SETTINGS = {
+    'project': 'egnn-mi',
+    'entity': 'mazeller',
+    # the directory handled by wandb itself, distinct from parsed data
+    'dir': WANDB_PATH
+}

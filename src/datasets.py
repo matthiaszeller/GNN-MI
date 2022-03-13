@@ -194,6 +194,10 @@ class PatientDataset(TorchDataset):
 
 
 def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDataset, PatientDataset]]):
+    """
+    Perform sanity checks on data splits. Checks that:
+        - for a given train/val split, there's no train-val overlap AND none of them overlaps with test set
+    """
     logging.info('sanity checking data splits')
     # Check test data is not in train nor val
     test_patients = test_split.patients
@@ -228,10 +232,13 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
         train_patients_across_splits = train_patients_across_splits.union(train)
 
     # Check across splits
-    if len(val_patients_across_splits) != len(train_patients_across_splits):
-        oks = False
-        logging.error(f'union of train sets (length {len(train_patients_across_splits)})'
-                      f'is not the union of validation sets (length {len(val_patients_across_splits)})')
+    # IMPORTANT NOTE: I'm letting this code because it's not obvious at first that the
+    #                 test below *should* actually fail: because of augmented data
+    # TODO: check that union of train sets is union of val sets AFTER filtering augmented data
+    # if len(val_patients_across_splits) != len(train_patients_across_splits):
+    #     oks = False
+    #     logging.error(f'union of train sets (length {len(train_patients_across_splits)})'
+    #                   f' is not the union of validation sets (length {len(val_patients_across_splits)})')
 
     if not oks:
         raise ValueError

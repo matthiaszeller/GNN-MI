@@ -198,7 +198,12 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
     # Check test data is not in train nor val
     test_patients = test_split.patients
     oks = True
+
+    val_patients_across_splits = set()
+    train_patients_across_splits = set()
     for i, (train, val) in enumerate(split_list):
+        train = train.patients
+        val = val.patients
         inter_trainval = set(train).intersection(val)
         inter_testtrain = set(test_patients).intersection(train)
         inter_testval = set(test_patients).intersection(val)
@@ -218,6 +223,14 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
                 logging.error(f'intersection {desc}, num={len(inter)}, {inter}')
         else:
             logging.debug(f'data split {i+1}/{len(split_list)} - no error detected')
+
+        val_patients_across_splits = val_patients_across_splits.union(val)
+        train_patients_across_splits = train_patients_across_splits.union(train)
+
+    # Check across splits
+    if len(val_patients_across_splits) != len(train_patients_across_splits):
+        oks = False
+        logging.error(f'union of train sets is not the union of validation sets')
 
     if not oks:
         raise ValueError

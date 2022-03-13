@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Dict
 
 import torch
 import torch.nn.functional as F
@@ -8,6 +8,18 @@ from torch.nn import Linear, ELU, ReLU, Dropout, BatchNorm1d, Sequential, Softma
 
 import setup
 from egnn import E_GCL
+
+
+def checkpoint_model(path, model: torch.nn.Module, optimizer: torch.optim.Optimizer, epoch: int, metrics: Dict):
+    torch.save(
+        {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optim_state_dict': optimizer.state_dict(),
+            'metrics': metrics
+        },
+        path
+    )
 
 
 class GINActivatedModule(nn.GINConv):
@@ -81,19 +93,19 @@ class EGNN(GNNBase):
         assert self.num_equiv > 0
 
         self.equiv = nn.Sequential('h, edge_index, coord',
-           [
-               # First module handled separately because of input dimension
-               (
-                   E_GCL(num_node_features, 16, 16, tanh=False, residual=False),
-                   'h, edge_index, coord -> h, coord, edge_attr')
-           ] + [
-               # Then add as many modules as necessary
-               (
-                   E_GCL(16, 16, 16, tanh=False),
-                   'h, edge_index, coord -> h, coord, edge_attr'
-               ) for _ in range(num_equiv - 1)
-           ]
-        )
+                                   [
+                                       # First module handled separately because of input dimension
+                                       (
+                                           E_GCL(num_node_features, 16, 16, tanh=False, residual=False),
+                                           'h, edge_index, coord -> h, coord, edge_attr')
+                                   ] + [
+                                       # Then add as many modules as necessary
+                                       (
+                                           E_GCL(16, 16, 16, tanh=False),
+                                           'h, edge_index, coord -> h, coord, edge_attr'
+                                       ) for _ in range(num_equiv - 1)
+                                   ]
+                                   )
         # self.equiv = E_GCL(0, 16, 16, tanh=False, residual=False)
         # self.equiv1 = E_GCL(16, 16, 16, tanh=False)
         # self.equiv2 = E_GCL(16, 16, 16, tanh=False)
@@ -184,28 +196,37 @@ class NoPhysicsGnn(GNNBase):
 
 if __name__ == '__main__':
     """
-    Do a few tests for debugging / code inspection.
+    Test model saving / restoring. Prerequisites: copy a file from CoordToCnc and WSSToCnc in data.
     """
     from torch_geometric.loader import DataLoader
 
     path = setup.get_project_root_path().joinpath('data/')
 
-    sample = torch.load(path.joinpath('sample_WSS.pt'))
+    # --- Pass sample of CoordToCnc dataset through model
+    sample = torch.load(path.joinpath('sample_coordtocnc.pt'))
     num_node_features = sample.x.shape[1]
-
     model = EGNN(num_classes=2, num_node_features=num_node_features, num_equiv=2, num_gin=2)
+    model.eval()
     for data in DataLoader([sample], batch_size=1):
-        output_wss = model(data.x,
-                           data.coord,
-                           data.segment,
-                           data.edge_index,
-                           data.batch)
+        output_wss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
 
-    sample = torch.load(path.joinpath('sample_Coord.pt'))
-    model = EGNN(num_classes=2, num_node_features=0, num_equiv=2, num_gin=2)
+    # --- Pass sample of WssToCnc dataset through model
+    sample = torch.load(path.joinpath('sample_wss.pt'))
+    num_node_features = sample.x.shape[1]
+    model = EGNN(num_classes=2, num_node_features=num_node_features, num_equiv=2, num_gin=2)
+    model.eval()
     for data in DataLoader([sample], batch_size=1):
-        output_nowss = model(data.x,
-                             data.coord,
-                             data.segment,
-                             data.edge_index,
-                             data.batch)
+        output_nowss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+
+    # -- Checkpoint and restore a copy of the model
+    checkpoint_model('test_checkpoint.pt', model, torch.optim.Adam(model.parameters()), 100, dict())
+    checkpoint = torch.load('test_checkpoint.pt')
+    restored = EGNN(num_classes=2, num_node_features=num_node_features, num_equiv=2, num_gin=2)
+    restored.load_state_dict(checkpoint['model_state_dict'])
+    restored.eval()
+    # Check if this yields the same output
+    for data in DataLoader([sample], batch_size=1):
+        output_nowss_compare = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+
+    torch.testing.assert_allclose(output_nowss, output_nowss_compare)
+

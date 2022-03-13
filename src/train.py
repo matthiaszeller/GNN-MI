@@ -82,6 +82,7 @@ class GNN:
         weights = torch.tensor([1 - weight1, weight1])  # for class imbalance
 
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device) # TODO: check consistency with last layer of classifier. (Seems to apply softmax twice.)
+        self.epoch = None
 
     @staticmethod
     def calculate_metrics(y_pred, y_true):
@@ -125,6 +126,7 @@ class GNN:
         epochs_no_improve = 0
         min_val_loss = 1e8
         for epoch_idx in range(1, epochs + 1):
+            self.epoch = epoch_idx
             if epoch_idx % 10 == 0:
                 logging.info(f'epoch {epoch_idx} / {epochs}')
             running_loss_cnc = 0.0  # Remains from physics models.
@@ -144,24 +146,25 @@ class GNN:
             train_loss_cnc = running_loss_cnc / len(self.train_loader.dataset)
             (acc, prec, rec,
              sens, spec, f1score) = self.calculate_metrics(y_pred, y_true)
-            # TODO add step so that train & eval are aligned
+            # wandb log, don't commit i) for performance ii) to align train and eval logs
             run.log({
                 'train': {
+                    'epoch': epoch_idx,
                     'ratio': self.ratio,
-                    'train_accuracy': acc,
-                    'train_precision': prec,
-                    'train_recall': rec,
-                    'train_sensitivity': sens,
-                    'train_specificity': spec,
-                    'train_f1score': f1score,
-                    'train_loss_graph': train_loss_cnc
+                    'accuracy': acc,
+                    'precision': prec,
+                    'recall': rec,
+                    'sensitivity': sens,
+                    'specificity': spec,
+                    'f1score': f1score,
+                    'loss_graph': train_loss_cnc
                 }
-            }, commit=False) # rather commit at evaluation for performance
+            }, commit=False)
 
+            # Evaluation
             self.model.eval()
-            # val score:
-            (acc, prec, rec, sensitivity,
-            specificity, f1_score, val_loss) = self.evaluate(val_set=True)
+            (acc, prec, rec, sensitivity, specificity, f1_score, val_loss) = self.evaluate(val_set=True)
+            # Early stopping
             if val_loss < min_val_loss: # TODO: change this to average of last 3 val_loss is < min avg of 3 consecutive val losses
                 epochs_no_improve = 0
                 min_val_loss = val_loss
@@ -206,13 +209,14 @@ class GNN:
 
         run.log({
             prefix: {
-                prefix + '_accuracy': acc,
-                prefix + '_precision': prec,
-                prefix + '_recall': rec,
-                prefix + '_sensitivity': sensitivity,
-                prefix + '_specificity': specificity,
-                prefix + '_f1score': f1_score,
-                prefix + '_loss_graph': val_loss_cnc
+                'epoch': self.epoch,
+                'accuracy': acc,
+                'precision': prec,
+                'recall': rec,
+                'sensitivity': sensitivity,
+                'specificity': specificity,
+                'f1score': f1_score,
+                'loss_graph': val_loss_cnc
             }
         })
         return acc, prec, rec, sensitivity, specificity, f1_score, val_loss

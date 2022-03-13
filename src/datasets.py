@@ -230,7 +230,8 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
     # Check across splits
     if len(val_patients_across_splits) != len(train_patients_across_splits):
         oks = False
-        logging.error(f'union of train sets is not the union of validation sets')
+        logging.error(f'union of train sets (length {len(train_patients_across_splits)})'
+                      f'is not the union of validation sets (length {len(val_patients_across_splits)})')
 
     if not oks:
         raise ValueError

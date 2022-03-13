@@ -1,6 +1,26 @@
+import logging
 from itertools import product
+from typing import List, Tuple
 
+import torch.nn
 import yaml
+
+from datasets import PatientDataset
+
+
+def get_model_num_params(model: torch.nn.Module, only_requires_grad: bool = True):
+    n = 0
+    for param in model.parameters():
+        if only_requires_grad and param.requires_grad:
+            n += param.numel()
+        else:
+            n += param.numel()
+
+    return n
+
+
+def describe_data_split(dataset):
+    logging.info(f'{dataset.train} set, length {len(dataset)}, {dataset.patients}')
 
 
 def grid_search(path_yaml_file):

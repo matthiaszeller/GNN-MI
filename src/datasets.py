@@ -1,19 +1,17 @@
+
+
 import logging
 import os
-from pathlib import Path
+import pickle
 from typing import Union, List, Tuple
 
 import numpy as np
-import pickle
 import torch
 from sklearn.model_selection import train_test_split, KFold
 from torch_geometric.data import Dataset as TorchDataset
 
 import setup
 from create_data import parse_data_file_name
-
-
-# TODO: currently doing Kfold cross validation => loading each (train or val) file K times, pretty bad in terms of memory
 
 
 def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
@@ -91,6 +89,7 @@ def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
         # here split list has length 1, just to imitate the cross val format
 
     logging.info(f'split_data (test_set, split_list) = ({test_set}, {split_list})')
+    check_splits(test_split, split_list)
     return test_set, split_list
 
 
@@ -142,7 +141,8 @@ class PatientDataset(TorchDataset):
             ]
             # TODO if in_memory False, this sanity check isn't done anywhere else and error is really hard to debug
             if self._data[0].x.shape[1] != self.num_node_features:
-                raise ValueError
+                raise ValueError(f'data has shape {self._data[0].x.shape[1]} '
+                                 f'but num feature is {self.num_node_features}')
         else:
             # TODO better handle this case
             # TODO chekc above comment about sanity check and num_node_features
@@ -193,9 +193,40 @@ class PatientDataset(TorchDataset):
         return f'PatientDataset({len(self)}, type={self.train}, in_memory={self.in_memory})'
 
 
+def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDataset, PatientDataset]]):
+    logging.info('sanity checking data splits')
+    # Check test data is not in train nor val
+    test_patients = test_split.patients
+    oks = True
+    for i, (train, val) in enumerate(split_list):
+        inter_trainval = set(train).intersection(val)
+        inter_testtrain = set(test_patients).intersection(train)
+        inter_testval = set(test_patients).intersection(val)
+        inter_all = inter_trainval.intersection(test_patients)
+
+        intersections = (
+            ('train-val', inter_trainval),
+            ('test-train', inter_testtrain),
+            ('test-val', inter_testval),
+            ('train-val-test', inter_all)
+        )
+        ok = all(len(inter) == 0 for _, inter in intersections)
+        oks = ok and oks
+        if not ok:
+            logging.error(f'data split error in split {i+1}/{len(split_list)}')
+            for desc, inter in intersections:
+                logging.error(f'intersection {desc}, num={len(inter)}, {inter}')
+        else:
+            logging.debug(f'data split {i+1}/{len(split_list)} - no error detected')
+
+    if not oks:
+        raise ValueError
+
+
 if __name__ == '__main__':
     path_in, path_out = setup.get_data_paths()
     path_dataset = path_out.joinpath('CoordToCnc_KNN5')
-    test_split, split_list = split_data(path_dataset)
+    test_split, split_list = split_data(path_dataset, num_node_features=0, cv=True, k_cross=10)
 
+    check_splits(test_split, split_list)
 

@@ -1,6 +1,7 @@
 
 
 import argparse
+import json
 import math
 import os
 
@@ -12,6 +13,7 @@ import vtk
 from torch_geometric.data import Data
 from vtk.util.numpy_support import vtk_to_numpy
 
+import setup
 from data_augmentation import create_knn_data
 from setup import *
 
@@ -46,6 +48,7 @@ def parse_data_file_name(file):
     # Find if augmented
     is_augmented = False
     for opt_part in optional:
+        # TODO: this is not default deny => bad design
         if any(pattern in opt_part.lower() for pattern in ('knn', 'noise', 'rot')):
             is_augmented = True
             break
@@ -138,8 +141,18 @@ def create_patient_dict(path, savepath):
             data_dict[patient] = []
             data_dict[patient].append(item)
 
-    with open(savepath, 'wb') as f:
-        pickle.dump(data_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(savepath, 'w') as f:
+        json.dump(data_dict, f, indent=4)
+
+
+def load_patient_dict(path=None):
+    if path is None:
+        _, path = setup.get_data_paths()
+
+    with open(path.joinpath('patient_dict.json'), 'rb') as f:
+        patient_dict = json.load(f)
+
+    return patient_dict
 
 
 def create_mesh_data(surface, div=False, coord=False):
@@ -189,24 +202,23 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
         savepath.mkdir()
 
     # Create patient-segment dictionary
-    path_patient_dic = path_write.joinpath('patient_dict.pickle')
+    path_patient_dic = path_write.joinpath('patient_dict.json')
     if not path_patient_dic.exists():
         create_patient_dict(path_input, path_patient_dic)
     logging.info('loading patient dictionary ...')
-    with open(path_patient_dic, 'rb') as f:
-        data_dict = pickle.load(f)
+    patient_dict = load_patient_dict()
 
     # Parse labels
     culprits = read_labels(path_label)
     if name == 'TsviPlusCnc':
         seg_to_tsvi = read_tsvi(path_label)
 
-    logging.info(f'number of keys in patient dict: {len(data_dict)}')
+    logging.info(f'number of keys in patient dict: {len(patient_dict)}')
 
     # Loop over patients: process data from input path and write to output path
     counter = 0
-    for pt in data_dict.keys():
-        for pt_seg in data_dict[pt]:
+    for pt in patient_dict.keys():
+        for pt_seg in patient_dict[pt]:
             logging.debug(f'processing item {pt_seg}')
             counter += 1
             culprit = 1 if pt_seg in culprits else 0

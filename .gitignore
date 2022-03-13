@@ -4,6 +4,8 @@ data
 
 # --- Project specific
 src/data-path.txt
+*.pt
+*.pickle
 
 # --- General
 # backups

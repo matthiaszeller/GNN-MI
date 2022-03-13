@@ -1,4 +1,5 @@
-from typing import Union, Dict
+import logging
+from typing import Union, Dict, OrderedDict
 
 import torch
 import torch.nn.functional as F
@@ -10,12 +11,13 @@ import setup
 from egnn import E_GCL
 
 
-def checkpoint_model(path, model: torch.nn.Module, optimizer: torch.optim.Optimizer, epoch: int, metrics: Dict):
+def checkpoint_model(path, model_dict: OrderedDict, optimizer_dict: Dict, epoch: int, metrics: Dict):
+    logging.info(f'checkpointing model at epoch {epoch} into {path}')
     torch.save(
         {
             'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optim_state_dict': optimizer.state_dict(),
+            'model_state_dict': model_dict,
+            'optim_state_dict': optimizer_dict,
             'metrics': metrics
         },
         path

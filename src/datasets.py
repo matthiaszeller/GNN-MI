@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split, KFold
 from torch_geometric.data import Dataset as TorchDataset
 
 import setup
-from create_data import parse_data_file_name
+from create_data import parse_data_file_name, load_patient_dict
 
 
 def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
@@ -35,11 +35,8 @@ def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
     # TODO: be convinced that this choice is the right one
     # (this ensures/facilitates that we don'T train on
     # augmented data from valid/test set.)
-    _, path_output = setup.get_data_paths()
-
-    with open(path_output.joinpath('patient_dict.pickle'), 'rb') as f:
-        data_dict = pickle.load(f)
-    patients = np.array(list(data_dict.keys()))  # names of patients
+    patient_dict = load_patient_dict()
+    patients = np.array(list(patient_dict.keys()))  # names of patients
     patients = np.sort(patients)  # Safety, for seed to make sense
 
     # first isolate 10% of data for test set:
@@ -135,7 +132,7 @@ class PatientDataset(TorchDataset):
 
         self.in_memory = in_memory
         if self.in_memory:
-            logging.info(f'loading {train} patients into memory')
+            logging.debug(f'loading {train} patients into memory')
             self._data = [
                 self._load_from_disk(i) for i in range(self.length)
             ]

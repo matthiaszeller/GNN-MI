@@ -1,14 +1,18 @@
+
+
 import logging
-from typing import Dict, Iterable
+from pathlib import Path
+from typing import Dict, Any, Union, Tuple, List, OrderedDict
 
 import numpy as np
 import torch
 import wandb
-from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix, f1_score
+from sklearn.metrics import classification_report
 from torch_geometric.loader import DataLoader
 
+import setup
 from datasets import PatientDataset
-from models import NoPhysicsGnn, EGNN
+from models import NoPhysicsGnn, EGNN, GNNBase, checkpoint_model
 
 
 class GNN:
@@ -23,6 +27,7 @@ class GNN:
         - instantiate optimizer
         - instantiate criterion
     """
+
     # TODO: Add a model "EquivWSS" which is exactly like "Equiv", but
     # which uses the WSS scalars as invariant features h. 
 
@@ -31,22 +36,30 @@ class GNN:
     # (https://github.com/yooyoo9/MI-detection), and combine that
     # to the Equivariant framework. Note that this is different than,
     # EquivWSS, as the latter does not do any prediction at the node level. 
-    # Good luck! :) 
+    # Good luck! :)
+
+    model: GNNBase
+
     def __init__(
             self,
-            model_param: Dict,
+            config: Dict[str, Any],
             train_set: PatientDataset,
             valid_set: PatientDataset,
-            test_set: PatientDataset,
-            batch_size: int,
-            optim_param: Dict,
-            weight1: Iterable,
-            args: Dict
+            test_set: Union[PatientDataset, None] = None,
+            model_save_path: Union[str, Path] = None
     ):
         dev = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(dev)
-        print("Using device:", self.device)
-        self.model_type = model_param['type']
+        logging.info(f'Using device: {self.device}')
+        if dev != 'cuda':
+            logging.warning('running on CPU, do you really want to do this !?')
+
+        self.model_type = config['model.type']
+        self.model_save_path = model_save_path
+        if self.model_save_path is None:
+            _, p = setup.get_data_paths()
+            self.model_save_path = p.joinpath('models')
+
         self.ratio = 1.0  # only useful for phys models
 
         if self.model_type == 'NoPhysicsGnn':
@@ -58,34 +71,60 @@ class GNN:
             self.automatic_update = False
             self.model = EGNN(num_classes=train_set.num_classes,
                               num_node_features=train_set.num_node_features,
-                              num_equiv=args['num_equiv'],
-                              num_gin=args['num_gin'])
+                              num_equiv=config['num_equiv'],
+                              num_gin=config['num_gin'])
         else:
             raise ValueError('unrecognized model type')
 
         self.model.to(self.device)
 
         # Debugging
-        logging.debug(f'Samples from train, val, test sets:\n{train_set[0]}\n{valid_set[0]}\n{test_set[0]}')
+        logging.debug(f'Samples from train, val, test sets:\n{train_set[0]}\n{valid_set[0]}\n'
+                      f'{test_set[0] if test_set is not None else ""}')
         # initialize data loader for batching
-        self.train_loader = DataLoader(train_set, batch_size, shuffle=True)
-        self.val_loader = DataLoader(valid_set, batch_size, shuffle=False)
-        self.test_loader = DataLoader(test_set, batch_size, shuffle=False) if test_set is not None else None
+        self.train_loader = DataLoader(train_set, config['batch_size'], shuffle=True)
+        self.val_loader = DataLoader(valid_set, config['batch_size'], shuffle=False)
+        self.test_loader = DataLoader(test_set, config['batch_size'], shuffle=False) if test_set is not None else None
 
-        if optim_param['optimizer'] == 'Adam':
+        if config['optimizer.name'] == 'Adam':
             self.optimizer = torch.optim.Adam(self.model.parameters(),
-                                              lr=optim_param['lr'])
-        else:
+                                              lr=config['optimizer.lr'])
+        elif config['optimizer.name'] == 'SGD':
             self.optimizer = torch.optim.SGD(self.model.parameters(),
-                                             lr=optim_param['lr'],
-                                             momentum=optim_param['momentum'])
-        weights = torch.tensor([1 - weight1, weight1])  # for class imbalance
+                                             lr=config['optimizer.lr'],
+                                             momentum=config['optimizer.momentum'])
 
-        self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device) # TODO: check consistency with last layer of classifier. (Seems to apply softmax twice.)
+        weights = torch.tensor([1 - config['loss.weight'], config['loss.weight']])  # for class imbalance
+
+        # TODO: check consistency with last layer of classifier. (Seems to apply softmax twice.)
+        self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
         self.epoch = None
 
+    def save_model(self, state_dic: OrderedDict, optimizer_dic: Dict,
+                   validation_metrics: Dict, run: wandb.sdk.wandb_run.Run):
+        """
+        Save model in `state_dic` locally and in wandb.
+        One must provide state_dic because of early stopping: the current model is not necessarily
+        the one we want to save.
+        """
+        if not self.model_save_path.exists():
+            self.model_save_path.mkdir()
+
+        file_name = f'model-{run.id}.pt'
+        file_path = self.model_save_path.joinpath(file_name)
+        # Save file locally
+        checkpoint_model(
+            path=file_path,
+            model_dict=state_dic,
+            optimizer_dict=optimizer_dic,
+            epoch=self.epoch,
+            metrics=validation_metrics
+        )
+        # Save file in wandb
+        run.save(str(file_path))
+
     @staticmethod
-    def calculate_metrics(y_pred, y_true):
+    def calculate_binary_classif_metrics(y_pred, y_true) -> Dict[str, float]:
         """
         Calculates several metrics to evaluate model.
 
@@ -94,91 +133,87 @@ class GNN:
         y_pred : np.array with predictions of model
         y_true : np.array with labels
         """
-        accuracy = accuracy_score(y_true, y_pred)
-        # tp/(tp + fp) i.e. fraction of right positively labelled guesses
-        precision = precision_score(y_true, y_pred, zero_division=0)
-        # tp / (tp + fn) i.e. fraction of rightly guessed CULPRITS
-        recall = recall_score(y_true, y_pred)
-        # harmonic mean btw precision and recall
-        f1score = f1_score(y_true, y_pred)
-        cm = confusion_matrix(y_true, y_pred)
-        # tn / (tn + fp) like recall but for Non Culprits
-        sensitivity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
-        # tp /(fn + tp): this is equal to recall
-        specificity = cm[1, 1] / (cm[1, 0] + cm[1, 1])
-        return accuracy, precision, recall, sensitivity, specificity, f1score
+        report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+        metrics = report['1']
+        metrics['accuracy'] = report['accuracy']
+        return metrics
 
-    def get_losses(self, data):
+    def get_losses(self, data: DataLoader) -> Tuple[torch.Tensor, List, torch.Tensor]:
         if self.physics:
             raise ValueError("!! Wrong argument: self.physics set to true. Not supported in this project.")
 
-        cnc = data.y
-        cnc_pred = self.model(data.x,
-                              data.coord,
-                              data.g_x,
-                              data.edge_index,
-                              data.batch)
-        loss = loss_cnc = self.criterion(cnc_pred, data.y)
-        return loss, loss_cnc, cnc_pred, cnc
+        yhat = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+        loss = self.criterion(yhat, data.y)
+        aux_loss = []
+        return loss, aux_loss, yhat
 
-    def train(self, epochs, early_stop, allow_stop=200, run=wandb):
+    def train(self, epochs: int, early_stop: int, allow_stop: int = 200,
+              run: wandb.sdk.wandb_run.Run = wandb):
         self.model.train()
         epochs_no_improve = 0
         min_val_loss = 1e8
+        metrics, val_metrics = None, None
+        last_best_model, last_best_optimizer = None, None
         for epoch_idx in range(1, epochs + 1):
             self.epoch = epoch_idx
             if epoch_idx % 10 == 0:
                 logging.info(f'epoch {epoch_idx} / {epochs}')
-            running_loss_cnc = 0.0  # Remains from physics models.
-            y_pred = np.array([])
-            y_true = np.array([])
+
+            running_loss = []
+            ys_pred, ys_true = [], []
+            # --- Training loop over batches
             for data in self.train_loader:
+                # Batch initialization
                 data = data.to(self.device)
                 self.optimizer.zero_grad()
-                loss, loss_cnc, cnc_pred, cnc = self.get_losses(data)
+                # Predict
+                loss, aux_loss, y_pred = self.get_losses(data)
+                # Backward propagation
                 loss.backward()
+                # Optimization step
                 self.optimizer.step()
-                pred = cnc_pred.argmax(dim=1)
-                y_pred = np.append(y_pred, pred.cpu().detach().numpy())
-                y_true = np.append(y_true, cnc.cpu().detach().numpy())
-                running_loss_cnc += loss_cnc.item()
 
-            train_loss_cnc = running_loss_cnc / len(self.train_loader.dataset)
-            (acc, prec, rec,
-             sens, spec, f1score) = self.calculate_metrics(y_pred, y_true)
-            # wandb log, don't commit i) for performance ii) to align train and eval logs
-            run.log({
-                'train': {
-                    'epoch': epoch_idx,
-                    'ratio': self.ratio,
-                    'accuracy': acc,
-                    'precision': prec,
-                    'recall': rec,
-                    'sensitivity': sens,
-                    'specificity': spec,
-                    'f1score': f1score,
-                    'loss_graph': train_loss_cnc
-                }
-            }, commit=False)
+                pred = y_pred.argmax(dim=1)
+                ys_pred.append(pred.detach().cpu().numpy())
+                ys_true.append(data.y.detach().cpu().numpy())
+                running_loss.append(loss.detach().cpu().item())
 
-            # Evaluation
+            # --- Compute metrics
+            train_loss = float(np.mean(running_loss))
+            metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true)
+            metrics['loss'] = train_loss
+            metrics['epoch'] = epoch_idx
+
+            # --- WandB logging, don't commit i) for performance ii) to align train and eval logs
+            run.log({'train': metrics}, commit=False)
+
+            # --- Evaluation
             self.model.eval()
-            (acc, prec, rec, sensitivity, specificity, f1_score, val_loss) = self.evaluate(val_set=True)
-            # Early stopping
-            if val_loss < min_val_loss: # TODO: change this to average of last 3 val_loss is < min avg of 3 consecutive val losses
+            val_metrics = self.evaluate(val_set=True)
+
+            # --- Early stopping
+            # Current epoch is the best -> reset
+            # TODO: change this to average of last 3 val_loss is < min avg of 3 consecutive val losses
+            if val_metrics['loss'] < min_val_loss:
                 epochs_no_improve = 0
-                min_val_loss = val_loss
+                min_val_loss = val_metrics['loss']
+                last_best_model = self.model.state_dict()
+                last_best_optimizer = self.optimizer.state_dict()
+            # Otherwise, increase counter
             else:
                 epochs_no_improve += 1
+            # Check if early stopping should apply
             if epochs_no_improve > early_stop and epoch_idx > allow_stop:
                 logging.info(f'early stop at epoch {epoch_idx}')
-                return (acc, prec, rec, sensitivity,
-                        specificity, f1_score, val_loss)
+                # Save best model
+                self.save_model(last_best_model, last_best_optimizer, val_metrics, run)
+                return val_metrics
 
         logging.info('training done')
-        return acc, prec, rec, sensitivity, specificity, f1_score, val_loss
+        self.save_model(self.model.state_dict(), self.optimizer.state_dict(), val_metrics, run)
+        return val_metrics
 
-    def evaluate(self, val_set, run=wandb):
+    def evaluate(self, val_set: bool, run: wandb.sdk.wandb_run.Run = wandb) -> Dict[str, float]:
         """
         val_set: bool indicating whether we use validation or test set
         """
@@ -188,35 +223,27 @@ class GNN:
         else:
             dataloader = self.test_loader
             prefix = 'test'
+
+        running_loss = []
+        ys_pred, ys_true = [], []
         self.model.eval()
-        running_loss_cnc, running_loss = 0.0, 0.0
-        y_pred = np.array([])
-        y_true = np.array([])
         with torch.no_grad():
             for data in dataloader:
                 data = data.to(self.device)
-                loss, loss_cnc, cnc_pred, cnc = self.get_losses(data)
-                pred = cnc_pred.argmax(dim=1)
-                y_pred = np.append(y_pred, pred.cpu().detach().numpy())
-                y_true = np.append(y_true, cnc.cpu().detach().numpy())
-                running_loss_cnc += loss_cnc.item()
-                running_loss += loss.item()
+                loss, aux_loss, y_pred = self.get_losses(data)
+                pred = y_pred.argmax(dim=1)
+                ys_pred.append(pred.cpu().detach().numpy())
+                ys_true.append(data.y.cpu().detach().numpy())
+                running_loss.append(loss.detach().cpu().item())
 
-        val_loss_cnc = running_loss_cnc / len(self.val_loader.dataset)
-        val_loss = running_loss / len(self.val_loader.dataset)
-        (acc, prec, rec, sensitivity,
-         specificity, f1_score) = self.calculate_metrics(y_pred, y_true)
+        val_loss = float(np.mean(running_loss))
+        metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true)
+        metrics['loss'] = val_loss
+        metrics['epoc'] = self.epoch
 
         run.log({
-            prefix: {
-                'epoch': self.epoch,
-                'accuracy': acc,
-                'precision': prec,
-                'recall': rec,
-                'sensitivity': sensitivity,
-                'specificity': specificity,
-                'f1score': f1_score,
-                'loss_graph': val_loss_cnc
-            }
+            # must use top-level metric for sweep logging, see wandb sweep documentation
+            'val_loss': val_loss,
+            prefix: metrics
         })
-        return acc, prec, rec, sensitivity, specificity, f1_score, val_loss
+        return metrics

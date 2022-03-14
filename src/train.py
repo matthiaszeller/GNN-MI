@@ -123,7 +123,7 @@ class GNN:
             metrics=validation_metrics
         )
         # Save file in wandb
-        run.save(file_path)
+        #run.save(file_path)
 
     @staticmethod
     def calculate_binary_classif_metrics(y_pred, y_true) -> Dict[str, float]:
@@ -156,7 +156,7 @@ class GNN:
         min_val_loss = 1e8
         metrics, val_metrics = None, None
         last_best_model, last_best_optimizer = None, None
-        last_best_val_metrics = None
+        last_best_val_metrics, last_best_train_metrics = None, None
         for epoch_idx in range(1, epochs + 1):
             self.epoch = epoch_idx
             if epoch_idx % 10 == 0:
@@ -205,6 +205,7 @@ class GNN:
                 last_best_model = self.model.state_dict()
                 last_best_optimizer = self.optimizer.state_dict()
                 last_best_val_metrics = val_metrics.copy()
+                last_best_train_metrics = metrics.copy()
             # Otherwise, increase counter
             else:
                 epochs_no_improve += 1
@@ -212,12 +213,24 @@ class GNN:
             if epochs_no_improve > early_stop and epoch_idx > allow_stop:
                 logging.info(f'early stop at epoch {epoch_idx}')
                 # Save best model
-                self.save_model(last_best_model, last_best_optimizer, last_best_val_metrics, run)
+                last_best_epoch = self.epoch - early_stop
+                self.save_model(last_best_model, last_best_optimizer,
+                                last_best_epoch, last_best_val_metrics, run)
+                # Update summary: should reflect the validation metrics at last best epoch
+                # Warning: this doesn't work as if you call run.summary *once a run has finished*
+                run.summary.update({
+                    '_step': last_best_epoch,
+                    'train': last_best_train_metrics,
+                    'val': last_best_val_metrics,
+                    'val_loss': last_best_val_metrics['loss'],
+                    'early_stop': True
+                })
                 return val_metrics
 
         logging.info('training done')
+        run.summary.update({'early_stop': False})
         self.save_model(self.model.state_dict(), self.optimizer.state_dict(),
-                        self.epoch - early_stop, val_metrics, run)
+                        self.epoch, val_metrics, run)
         return val_metrics
 
     def evaluate(self, val_set: bool, run: wandb.sdk.wandb_run.Run = wandb) -> Dict[str, float]:
@@ -248,7 +261,7 @@ class GNN:
         ys_pred = np.concatenate(ys_pred)
         metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true)
         metrics['loss'] = val_loss
-        metrics['epoc'] = self.epoch
+        metrics['epoch'] = self.epoch
 
         run.log({
             # must use top-level metric for sweep logging, see wandb sweep documentation

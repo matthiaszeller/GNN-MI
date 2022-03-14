@@ -28,6 +28,8 @@ if len(config.keys()) == 0:
     with open(args.file) as f:
         config = yaml.load(f)
     job_type = args.job_type
+    if job_type is None:
+        job_type = 'test'
 else:
     job_type = f'sweep-{random_name}'
 
@@ -46,7 +48,8 @@ for i, (train_set, val_set) in enumerate(split_list):
                      reinit=True,
                      group=f"model-{config['model.name']}",
                      job_type=job_type,
-                     name=f'fold-{i+1}')
+                     name=f'fold-{i+1}',
+                     config=config)
 
     logging.info(f'KFold CV {i + 1}/{n_folds}')
     logging.info(f'training set, length {len(train_set)}, {train_set.patients}')

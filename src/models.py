@@ -44,7 +44,7 @@ class GNNBase(torch.nn.Module):
     Baseline model, contains common blocks of EquivNoPys and NoPhysicsGnn
     """
 
-    def __init__(self, num_classes: int):
+    def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int, num_pooling_ops: int):
         super().__init__()
 
         self.gmp = nn.global_mean_pool
@@ -52,15 +52,15 @@ class GNNBase(torch.nn.Module):
 
         self.equiv = None
         self.gin_layers = []
+        self.num_pooling_ops = num_pooling_ops
 
         self.classifier = Sequential(
-            Dropout(p=0.5),
-            Linear(2 * 16 + 1, 16),  # TODO: once one-hot-encoding for segment is done, should be +3 instead of +1
+            #Dropout(p=0.5),
+            Linear(self.num_pooling_ops * num_hidden_dim + num_graph_features, num_hidden_dim),  # TODO: once one-hot-encoding for segment is done, should be +3 instead of +1
             ELU(alpha=0.1),
             Dropout(p=0.5),
-            Linear(16, num_classes),
-            # TODO: For the culprit/nonculprit classification, we could simply predict one probability instead of two, saving parameters.
-            Softmax(dim=1)  # TODO: remove this or change loss function to one that does not recompute the softmax
+            Linear(num_hidden_dim, num_classes),
+            Softmax(dim=1)
         )
 
     def forward(self, h0, coord0, g0, edge_index, batch):
@@ -81,88 +81,62 @@ class EGNN(GNNBase):
     The output of GIN layers are processed by the classifier of the parent class GNNBase.
     """
 
-    def __init__(self, num_classes: int, num_node_features: int = 0, num_equiv: int = 2, num_gin: int = 2):
+    def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int,
+                 num_node_features: int = 0, num_equiv: int = 2, num_gin: int = 2):
         """
         @param num_classes: see BaseGNN
         @param num_node_features: number of features per node
         @param num_equiv: number of E_GCL layers
         @param num_gin: number of gin layers
         """
-        super().__init__(num_classes)
+        super().__init__(num_classes=num_classes,
+                         num_hidden_dim=num_hidden_dim,
+                         num_graph_features=num_graph_features,
+                         num_pooling_ops=2)
 
         self.num_gin = num_gin
         self.num_equiv = num_equiv
+        self.num_hidden_dim = num_hidden_dim
+        self.num_node_features = num_node_features
         assert self.num_equiv > 0
 
         self.equiv = nn.Sequential('h, edge_index, coord',
-                                   [
-                                       # First module handled separately because of input dimension
-                                       (
-                                           E_GCL(num_node_features, 16, 16, tanh=False, residual=False),
-                                           'h, edge_index, coord -> h, coord, edge_attr')
-                                   ] + [
-                                       # Then add as many modules as necessary
-                                       (
-                                           E_GCL(16, 16, 16, tanh=False),
-                                           'h, edge_index, coord -> h, coord, edge_attr'
-                                       ) for _ in range(num_equiv - 1)
-                                   ]
-                                   )
-        # self.equiv = E_GCL(0, 16, 16, tanh=False, residual=False)
-        # self.equiv1 = E_GCL(16, 16, 16, tanh=False)
-        # self.equiv2 = E_GCL(16, 16, 16, tanh=False)
-        # self.equiv3 = E_GCL(16, 16, 16, tanh=False)
-        # self.equiv4 = E_GCL(16, 16, 16, tanh=False)
-        # self.equiv5 = E_GCL(16, 16, 16, tanh=False)
-        # self.equiv6 = E_GCL(16, 16, 16, tanh=False)
+           [
+               # First module handled separately because of input dimension
+               (
+                   E_GCL(self.num_node_features, self.num_hidden_dim, self.num_hidden_dim, tanh=False, residual=False),
+                   'h, edge_index, coord -> h, coord, edge_attr')
+           ] + [
+               # Then add as many modules as necessary
+               (
+                   E_GCL(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim, tanh=False),
+                   'h, edge_index, coord -> h, coord, edge_attr'
+               ) for _ in range(num_equiv - 1)
+           ]
+        )
 
         if self.num_gin > 0:
             self.gin_layers = nn.Sequential('x, edge_index', [
-                (GINActivatedModule(16, 16, 16), 'x, edge_index -> x, edge_index')
+                (
+                    GINActivatedModule(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim),
+                    'x, edge_index -> x, edge_index'
+                )
                 for _ in range(num_gin)
             ])
-        # self.gin = self.get_GIN(16, 16, 16)
-        # self.gin2 = self.get_GIN(16, 16, 16)
-        # self.gin3 = self.get_GIN(16, 16, 16)
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
-        # if self.num_equiv > 0:
-        #     rep, coord, _ = self.equiv(None, edge_index, x, None)
-        # if self.num_equiv > 1:
-        #     rep, coord, _ = self.equiv2(rep, edge_index, coord, None)
-        # if self.num_equiv > 2:
-        #     rep, coord, _ = self.equiv3(rep, edge_index, coord, None)
-        # if self.num_equiv > 3:
-        #     rep, coord, _ = self.equiv4(rep, edge_index, coord, None)
-        # if self.num_equiv > 4:
-        #     rep, coord, _ = self.equiv5(rep, edge_index, coord, None)
-        # if self.num_equiv > 5:
-        #     rep, coord, _ = self.equiv6(rep, edge_index, coord, None)
         # TODO check node_attr vs h
         h, x, edge_attr = self.equiv(h0, edge_index, coord0)
 
         if self.num_gin > 0:
             h, _ = self.gin_layers(h, edge_index)
-        # for gin_layer in self.gin_layers:
-        #     h = gin_layer(h, edge_index)
-        #     h = F.elu(h, alpha=0.1)
-        # if self.num_gin>0:
-        #     rep = self.gin(rep, edge_index)
-        #     rep = F.elu(rep, alpha=0.1)
-        #     if self.num_gin>1:
-        #         rep = self.gin2(rep, edge_index)
-        #         rep = F.elu(rep, alpha=0.1)
-        #         if self.num_gin>2:
-        #             rep = self.gin3(rep, edge_index)
-        #             rep = F.elu(rep, alpha=0.1)
-        #     rep, coord = rep, coord
 
         # Graph pooling operations
         x1 = self.gmp(h, batch)
         x2 = self.gap(h, batch)
 
-        x = torch.cat((x1, x2, g0.view(-1, 1)), dim=1)  # TODO: Change this into a one-hot-encoding
+        x = torch.cat((x1, x2, g0), dim=1)  # TODO: Change this into a one-hot-encoding
         x = self.classifier(x)
         return x
 
@@ -203,19 +177,29 @@ if __name__ == '__main__':
     from torch_geometric.loader import DataLoader
 
     path = setup.get_project_root_path().joinpath('data/')
+    params_EGNN = {
+        'num_classes': 2,
+        'num_hidden_dim': 8,
+        'num_graph_features': 3,
+        'num_gin': 2,
+    }
 
     # --- Pass sample of CoordToCnc dataset through model
     sample = torch.load(path.joinpath('sample_coordtocnc.pt'))
-    num_node_features = sample.x.shape[1]
-    model = EGNN(num_classes=2, num_node_features=num_node_features, num_equiv=2, num_gin=2)
+    sample.g_x = sample.g_x.reshape(1, -1)
+    sample2 = sample.clone()
+    sample2.y = 0
+    sample2.g_x[0, 2] = 1.0
+    params_EGNN['num_node_features'] = sample.x.shape[1]
+    model = EGNN(**params_EGNN)
     model.eval()
-    for data in DataLoader([sample], batch_size=1):
+    for data in DataLoader([sample, sample2], batch_size=2):
         output_wss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
 
     # --- Pass sample of WssToCnc dataset through model
     sample = torch.load(path.joinpath('sample_wss.pt'))
-    num_node_features = sample.x.shape[1]
-    model = EGNN(num_classes=2, num_node_features=num_node_features, num_equiv=2, num_gin=2)
+    params_EGNN['num_node_features'] = sample.x.shape[1]
+    model = EGNN(**params_EGNN)
     model.eval()
     for data in DataLoader([sample], batch_size=1):
         output_nowss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
@@ -223,7 +207,7 @@ if __name__ == '__main__':
     # -- Checkpoint and restore a copy of the model
     checkpoint_model('test_checkpoint.pt', model, torch.optim.Adam(model.parameters()), 100, dict())
     checkpoint = torch.load('test_checkpoint.pt')
-    restored = EGNN(num_classes=2, num_node_features=num_node_features, num_equiv=2, num_gin=2)
+    restored = EGNN(**params_EGNN)
     restored.load_state_dict(checkpoint['model_state_dict'])
     restored.eval()
     # Check if this yields the same output

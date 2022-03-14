@@ -1,11 +1,12 @@
 
 # --- Data
 data
+*.pt
+*.pickle
+*.csv
 
 # --- Project specific
 src/data-path.txt
-*.pt
-*.pickle
 
 # --- General
 # backups

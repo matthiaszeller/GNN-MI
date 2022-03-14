@@ -14,7 +14,7 @@ import setup
 from create_data import parse_data_file_name, load_patient_dict
 
 
-def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
+def split_data(path, num_node_features, seed, cv=False, k_cross=10, valid_ratio=0.3, **kwargs):
     """
     Splits the data fetched from `path` folder.
     Returns train, valid, test split, each are PatientDataset objects.
@@ -69,7 +69,7 @@ def split_data(path, num_node_features, cv=False, k_cross=10, seed=0, **kwargs):
                                            **kwargs))]
     else: # no cross val
         train_patients, val_patients = train_test_split(pretrain_patients,
-                                                        test_size=0.1,
+                                                        test_size=valid_ratio,
                                                         shuffle=True,
                                                         random_state=seed)
         # list of (train_set, val_set) tuples

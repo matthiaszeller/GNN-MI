@@ -1,0 +1,97 @@
+
+
+# WARNING: activate the conda environment on the workers before running the agent
+
+# Wandb sweep configuration for hyperparameter tuning.
+# Check config.yaml first
+
+# ====== Sweep-specific configuration
+program: run_sweep.py       # script to run
+method: bayes               # method to go over hyperparams
+metric:                     # reference metric, must be logged at top level
+  name: val_loss
+  goal: minimize
+
+parameters:
+  # ====== Model configuration, see config.yaml
+
+  # --- Model
+  model.type:
+    value: "Equiv"
+  model.name:
+    value: "Equiv_GIN_KNN5"
+  model.desc:
+    value: "some description"
+
+  # --- Dataset
+  dataset.name:
+    value: "CoordToCnc_KNN5"
+  dataset.in_memory:
+    value: true
+  dataset.num_node_features:
+    value: 0
+  dataset.num_graph_features:
+    value: 3
+
+  # --- Cross val
+  cv.valid_ratio:
+    value: 0.25
+  cv.k_fold:
+    value: None     # unused for hyperparam tuning
+  cv.seed:
+    value: 0
+
+  # ====== Actual hyperparameters
+
+  # --- Architecture
+  num_gin:
+    distribution: int_uniform
+    min: 0
+    max: 3
+
+  num_equiv:
+    distribution: int_uniform
+    min: 1
+    max: 6
+
+  num_hidden_dim:
+    distribution: categorical
+    values:
+      - 8
+      - 16
+      - 32
+
+  # --- Optimizer
+  optimizer.name:
+    distribution: categorical
+    values:
+      - "Adam"
+
+  optimizer.lr:
+    distribution: log_uniform
+    min: -13.815510557964274        # = ln(1e-6)
+    max: -2.3025850929940455        # = ln(1e-1)
+
+  optimizer.momentum:
+    value: 0.0
+
+  # --- Loss
+  loss.weight:
+    value: 0.6
+
+  # --- Training
+  batch_size:
+    value: 16
+  epochs:
+    value: 500
+
+  early_stop:
+    value: 100
+
+  allow_stop:
+    value: 100
+
+  # ---
+  physics:
+    value: 0
+

@@ -2,12 +2,13 @@
 
 
 model.type: 'Equiv' # 'NoPhysicsGnn'      # used by train.GNN
-model.name: 'Equiv_GIN_KNN5_refactored2'     # used as wandb group for bookkeeping
+model.name: 'Equiv_GIN_KNN5'     # used as wandb group for bookkeeping
 model.desc: "sanity check after code refactorization"
 
 dataset.name: "CoordToCnc_KNN5"           # used to retrieve path to data
-dataset.in_memory: true                         # whether to load all the data in RAM, passed to PatientDataset
-dataset.num_node_features: 0
+dataset.in_memory: true                   # whether to load all the data in RAM, passed to PatientDataset
+dataset.num_node_features: 0              # zero if no WSS values
+dataset.num_graph_features: 3             # one-hot encoded LAD, LCX, RCA
 
 k_fold: 5
 seed: 0
@@ -21,8 +22,9 @@ epochs: 2
 early_stop: 100
 num_gin: 0
 num_equiv: 3
+num_hidden_dim: 8
 allow_stop: 100
 physics: 0
-batch_size: 1
+batch_size: 8
 loss.weight: 0.6
 

@@ -183,6 +183,8 @@ class GNN:
 
             # --- Compute metrics
             train_loss = float(np.mean(running_loss))
+            ys_true = np.concatenate(ys_true)
+            ys_pred = np.concatenate(ys_pred)
             metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true)
             metrics['loss'] = train_loss
             metrics['epoch'] = epoch_idx
@@ -242,6 +244,8 @@ class GNN:
                 running_loss.append(loss.detach().cpu().item())
 
         val_loss = float(np.mean(running_loss))
+        ys_true = np.concatenate(ys_true)
+        ys_pred = np.concatenate(ys_pred)
         metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true)
         metrics['loss'] = val_loss
         metrics['epoc'] = self.epoch

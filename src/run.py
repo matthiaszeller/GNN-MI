@@ -18,14 +18,18 @@ run = wandb.init(**setup.WANDB_SETTINGS,
 logging.info(f'launched empty run with id {run.id}')
 config = run.config
 random_name = run.name
+# This means we're not doing a sweep
 if len(config.keys()) == 0:
     logging.info(f'parsing config from file')
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', type=str, help='yaml config file')
+    parser.add_argument('-j', '--job_type', type=str, help='wandb job type')
     args = parser.parse_args()
     with open(args.file) as f:
         config = yaml.load(f)
-
+    job_type = args.job_type
+else:
+    job_type = f'sweep-{random_name}'
 
 # --- Data splitting
 _, split_list = split_data(path=setup.get_dataset_path(config['dataset.name']),
@@ -41,7 +45,7 @@ for i, (train_set, val_set) in enumerate(split_list):
     run = wandb.init(**setup.WANDB_SETTINGS,
                      reinit=True,
                      group=f"model-{config['model.name']}",
-                     job_type=random_name,
+                     job_type=job_type,
                      name=f'fold-{i+1}')
 
     logging.info(f'KFold CV {i + 1}/{n_folds}')

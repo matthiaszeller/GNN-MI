@@ -17,7 +17,11 @@ import setup
 from data_augmentation import create_knn_data
 from setup import *
 
-NAME_TO_INT = {'LAD': 0, 'LCX': 1, 'RCA': 2}
+GRAPH_FEATURES_ONEHOT = {
+    'LAD': torch.tensor([1., 0., 0.]),
+    'LCX': torch.tensor([0., 1., 0.]),
+    'RCA': torch.tensor([0., 0., 1.])
+}
 
 
 def parse_data_file_name(file):
@@ -224,7 +228,8 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
             culprit = 1 if pt_seg in culprits else 0
             if name == 'TsviPlusCnc':
                 tsvi = seg_to_tsvi[pt_seg]
-            seg = pt_seg[-3:]  # LAD, RCA or LCX # TODO how this is done
+            # Graph features (LAD, LDX, RCA)
+            graph_features = GRAPH_FEATURES_ONEHOT[pt_seg[-3:]]
             # read data
             surface = read_poly_data(path_input + '/' + pt_seg + '_WSSMag.vtp')
             # get points of surface
@@ -248,7 +253,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                 #segment_data = vtk_to_numpy(surface.GetPoints().GetData())
             elif name == 'WssToCnc':
                 y = culprit
-                segment_data = create_mesh_data(surface, div=True, coord=False)
+                segment_data = create_mesh_data(surface, div=False, coord=False)
             elif name == 'WssPlusCnc':
                 wss_mag = np.mean(create_mesh_data(surface,
                                                    div=False,
@@ -269,7 +274,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                 segment_data = torch.from_numpy(segment_data).type(torch.FloatTensor)
             data = Data(x=segment_data,
                         coord=coord,
-                        g_x=NAME_TO_INT[seg],
+                        g_x=graph_features,
                         edge_index=edge_index,
                         y=y)
             path_file = savepath.joinpath(pt_seg + '.pt')
@@ -281,7 +286,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                 edges = create_knn_data(surface, k_neigh)
                 data = Data(x=segment_data,
                             coord=coord,
-                            g_x=NAME_TO_INT[seg],
+                            g_x=graph_features,
                             edge_index=edges,
                             y=y)
 
@@ -301,7 +306,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
                 )
                 data = Data(x=segment_data,
                             coord=coord,
-                            g_x=NAME_TO_INT[seg],
+                            g_x=graph_features,
                             edge_index=edge_index,
                             y=y)
                 path_file = savepath.joinpath(f'{pt_seg}_rot{angle:03d}.pt')

@@ -190,6 +190,12 @@ def create_mesh_data(surface, div=False, coord=False):
     return data
 
 
+def create_graph_features(artery_type: str):
+    onehot = GRAPH_FEATURES_ONEHOT[artery_type]
+    # WARNING: the reshaping is absolutely needed
+    return onehot.reshape(1, -1)
+
+
 @arg_logger
 def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
     """
@@ -229,7 +235,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
             if name == 'TsviPlusCnc':
                 tsvi = seg_to_tsvi[pt_seg]
             # Graph features (LAD, LDX, RCA)
-            graph_features = GRAPH_FEATURES_ONEHOT[pt_seg[-3:]]
+            graph_features = create_graph_features(pt_seg[-3:])
             # read data
             surface = read_poly_data(path_input + '/' + pt_seg + '_WSSMag.vtp')
             # get points of surface

@@ -70,6 +70,8 @@ class GNN:
             self.physics = False
             self.automatic_update = False
             self.model = EGNN(num_classes=train_set.num_classes,
+                              num_hidden_dim=config['num_hidden_dim'],
+                              num_graph_features=config['dataset.num_graph_features'],
                               num_node_features=train_set.num_node_features,
                               num_equiv=config['num_equiv'],
                               num_gin=config['num_gin'])
@@ -100,7 +102,7 @@ class GNN:
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
         self.epoch = None
 
-    def save_model(self, state_dic: OrderedDict, optimizer_dic: Dict,
+    def save_model(self, state_dic: OrderedDict, optimizer_dic: Dict, epoch: int,
                    validation_metrics: Dict, run: wandb.sdk.wandb_run.Run):
         """
         Save model in `state_dic` locally and in wandb.
@@ -117,11 +119,11 @@ class GNN:
             path=file_path,
             model_dict=state_dic,
             optimizer_dict=optimizer_dic,
-            epoch=self.epoch,
+            epoch=epoch,
             metrics=validation_metrics
         )
         # Save file in wandb
-        run.save(str(file_path))
+        run.save(file_path)
 
     @staticmethod
     def calculate_binary_classif_metrics(y_pred, y_true) -> Dict[str, float]:
@@ -154,6 +156,7 @@ class GNN:
         min_val_loss = 1e8
         metrics, val_metrics = None, None
         last_best_model, last_best_optimizer = None, None
+        last_best_val_metrics = None
         for epoch_idx in range(1, epochs + 1):
             self.epoch = epoch_idx
             if epoch_idx % 10 == 0:
@@ -199,6 +202,7 @@ class GNN:
                 min_val_loss = val_metrics['loss']
                 last_best_model = self.model.state_dict()
                 last_best_optimizer = self.optimizer.state_dict()
+                last_best_val_metrics = val_metrics.copy()
             # Otherwise, increase counter
             else:
                 epochs_no_improve += 1
@@ -206,11 +210,12 @@ class GNN:
             if epochs_no_improve > early_stop and epoch_idx > allow_stop:
                 logging.info(f'early stop at epoch {epoch_idx}')
                 # Save best model
-                self.save_model(last_best_model, last_best_optimizer, val_metrics, run)
+                self.save_model(last_best_model, last_best_optimizer, last_best_val_metrics, run)
                 return val_metrics
 
         logging.info('training done')
-        self.save_model(self.model.state_dict(), self.optimizer.state_dict(), val_metrics, run)
+        self.save_model(self.model.state_dict(), self.optimizer.state_dict(),
+                        self.epoch - early_stop, val_metrics, run)
         return val_metrics
 
     def evaluate(self, val_set: bool, run: wandb.sdk.wandb_run.Run = wandb) -> Dict[str, float]:

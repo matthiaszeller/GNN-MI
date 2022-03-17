@@ -1,0 +1,107 @@
+
+
+# WARNING: activate the conda environment on the workers before running the agent
+
+# Wandb sweep configuration for fine hyperparameter tuning.
+# The search method is grid.
+
+# ====== Sweep-specific configuration
+program: run_sweep_kfold.py       # script to run
+method: grid                      # method to go over hyperparams
+description: "get baseline results for refactored code"
+metric:                           # reference metric, must be logged at top level
+  name: val_loss
+  goal: minimize
+
+parameters:
+  # ====== Model configuration, see config.yaml
+
+  # --- Model
+  model.type:
+    value: "Equiv"
+  model.name:
+    value: "Equiv_GIN_KNN5"
+  model.desc:
+    value: "base model"
+
+  # --- Dataset
+  dataset.name:
+    value: "CoordToCnc_KNN5"
+  dataset.in_memory:
+    value: true
+  dataset.num_node_features:
+    value: 0
+  dataset.num_graph_features:
+    value: 3
+
+  # --- Cross val
+  cv.valid_ratio:
+    value: None     # not applicable for kfold
+  cv.k_fold:
+    value: 10
+  cv.fold_id:
+    values:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+  cv.seed:
+    value: 0
+
+  # ====== Actual hyperparameters
+
+  # --- Architecture
+  num_gin:
+    values:
+      - 0
+      - 1
+
+  num_equiv:
+    values:
+      - 3
+      - 4
+      - 6
+
+  num_hidden_dim:
+    values:
+      - 8
+      - 16
+
+  # --- Optimizer
+  optimizer.name:
+    value: "Adam"
+
+  optimizer.lr:
+    values:
+      - 2e-3
+      - 1e-4
+
+  optimizer.momentum:
+    value: 0.0
+
+  # --- Loss
+  loss.weight:
+    value: 0.6
+
+  # --- Training
+  batch_size:
+    value: 16
+  epochs:
+    value: 700
+
+  early_stop:
+    value: 100
+
+  allow_stop:
+    value: 100
+
+  # ---
+  physics:
+    value: 0
+

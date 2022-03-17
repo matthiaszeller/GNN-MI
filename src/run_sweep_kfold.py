@@ -1,7 +1,7 @@
 """
-Run coarse hyperparameter tuning with wandb sweep framework.
-Only use train/val split, i.e. no KFoldCV since coarse grid => many hyperparams.
-Use run_sweep_kfold.py for finer hyperparam tuning.
+Run finer hyperparameter tuning with wandb sweep framework.
+The fold id is in wandb config.
+Assumes run_sweep.py has been run to select fine grid of hyperparams
 """
 import logging
 import sys
@@ -27,19 +27,22 @@ model_name = filtered_args[0].split('=')[1]
 # The config is already included by wandb agent
 run = wandb.init(**setup.WANDB_SETTINGS,
                  group=f"model-{model_name}",
-                 job_type='sweep')
+                 job_type='sweep-kfold')
 config = dict(run.config)
 
 # --- Data splitting
-_, ((train_set, val_set),) = split_data(path=setup.get_dataset_path(config['dataset.name']),
-                                        num_node_features=config['dataset.num_node_features'],
-                                        seed=config['cv.seed'],
-                                        valid_ratio=config['cv.valid_ratio'],
-                                        cv=False,
-                                        in_memory=config['dataset.in_memory'])
+test_set, split_list = split_data(path=setup.get_dataset_path(config['dataset.name']),
+                                  num_node_features=config['dataset.num_node_features'],
+                                  seed=config['cv.seed'],
+                                  cv=True,
+                                  k_cross=config['cv.k_fold'],
+                                  in_memory=config['dataset.in_memory'])
+# Select the fold specified by wandb agent
+train_set, val_set = split_list[config['cv.fold_id']]
 
 logging.info(f'training set, length {len(train_set)}, {train_set.patients}')
 logging.info(f'validation set, length {len(val_set)}, {val_set.patients}')
+logging.info(f'unused test set, length {len(test_set)}, {test_set.patients}')
 
 # --- Model initialization
 logging.debug('model initialization')
@@ -61,4 +64,4 @@ val_metrics = gnn.train(
 # run.save()
 run.finish()
 
-logging.info('end of run_sweep.py')
+logging.info('end of run_sweep_kfold.py')

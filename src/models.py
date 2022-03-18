@@ -44,7 +44,11 @@ class GNNBase(torch.nn.Module):
     Baseline model, contains common blocks of EquivNoPys and NoPhysicsGnn
     """
 
-    def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int, num_pooling_ops: int):
+    def __init__(self, num_classes: int,
+                 num_hidden_dim: int,
+                 num_graph_features: int,
+                 num_pooling_ops: int,
+                 num_hidden_dim_classif: int = None):
         super().__init__()
 
         self.gmp = nn.global_mean_pool
@@ -53,13 +57,15 @@ class GNNBase(torch.nn.Module):
         self.equiv = None
         self.gin_layers = []
         self.num_pooling_ops = num_pooling_ops
+        if num_hidden_dim_classif is None:
+            num_hidden_dim_classif = num_hidden_dim
 
         self.classifier = Sequential(
             #Dropout(p=0.5),
-            Linear(self.num_pooling_ops * num_hidden_dim + num_graph_features, num_hidden_dim),  # TODO: once one-hot-encoding for segment is done, should be +3 instead of +1
+            Linear(self.num_pooling_ops * num_hidden_dim + num_graph_features, num_hidden_dim_classif),
             ELU(alpha=0.1),
             Dropout(p=0.5),
-            Linear(num_hidden_dim, num_classes),
+            Linear(num_hidden_dim_classif, num_classes),
             Softmax(dim=1)
         )
 

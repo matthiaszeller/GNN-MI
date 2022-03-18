@@ -1,6 +1,6 @@
 
 
-# ====== Configuration (not hyperparams)
+# ====== Configuration
 
 # --- Model
 model.type: 'Equiv' # 'NoPhysicsGnn'      # used by train.GNN
@@ -13,9 +13,11 @@ dataset.in_memory: true                   # whether to load all the data in RAM,
 dataset.num_node_features: 0              # zero if no WSS values
 dataset.num_graph_features: 3             # one-hot encoded LAD, LCX, RCA
 
-# --- Miscellaneous
-k_fold: 5
-seed: 0
+# --- Cross val
+cv.valid_ratio: None                      # not applicable
+cv.k_fold: 10
+cv.fold_id: None                          # not applicable
+cv.seed: 0
 
 # ====== Hyperparameters
 
@@ -33,8 +35,8 @@ optimizer.momentum: 0.0
 loss.weight: 0.6
 
 # --- Training
-batch_size: 8
-epochs: 2
+batch_size: 16
+epochs: 700
 early_stop: 100
 allow_stop: 100
 

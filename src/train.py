@@ -212,19 +212,19 @@ class GNN:
             # Check if early stopping should apply
             if epochs_no_improve > early_stop and epoch_idx > allow_stop:
                 logging.info(f'early stop at epoch {epoch_idx}')
-                # Save best model
-                last_best_epoch = self.epoch - early_stop
-                self.save_model(last_best_model, last_best_optimizer,
-                                last_best_epoch, last_best_val_metrics, run)
-                # Update summary: should reflect the validation metrics at last best epoch
-                # Warning: this doesn't work as if you call run.summary *once a run has finished*
-                run.summary.update({
-                    '_step': last_best_epoch,
-                    'train': last_best_train_metrics,
-                    'val': last_best_val_metrics,
-                    'val_loss': last_best_val_metrics['loss'],
-                    'early_stop': True
-                })
+                # # Save best model
+                # last_best_epoch = self.epoch - early_stop
+                # self.save_model(last_best_model, last_best_optimizer,
+                #                 last_best_epoch, last_best_val_metrics, run)
+                # # Update summary: should reflect the validation metrics at last best epoch
+                # # Warning: this doesn't work as if you call run.summary *once a run has finished*
+                # run.summary.update({
+                #     '_step': last_best_epoch,
+                #     'train': last_best_train_metrics,
+                #     'val': last_best_val_metrics,
+                #     'val_loss': last_best_val_metrics['loss'],
+                #     'early_stop': True
+                # })
                 return val_metrics
 
         logging.info('training done')

@@ -48,6 +48,15 @@ def get_dataset_path(dataset_name: str):
     return path.joinpath(dataset_name)
 
 
+def get_local_data_path():
+    path = get_project_root_path().joinpath('data')
+    if not path.exists():
+        logging.info(f'creating local data path at {str(path)}')
+        path.mkdir()
+
+    return path
+
+
 def arg_logger(fun):
     # Based on https://stackoverflow.com/questions/23983150/how-can-i-log-a-functions-arguments-in-a-reusable-way-in-python
     # Possible improvements with https://gist.github.com/DarwinAwardWinner/1170921
@@ -72,3 +81,13 @@ WANDB_SETTINGS = {
     # the directory handled by wandb itself, distinct from parsed data
     'dir': WANDB_PATH
 }
+
+
+if __name__ == '__main__':
+    logging.info('notebook setup...')
+    path_src = get_project_root_path().joinpath('src')
+
+    import sys
+    sys.path.insert(0, str(path_src.absolute()))
+
+    logging.info('added src path to sys.path')

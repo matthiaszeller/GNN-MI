@@ -266,7 +266,7 @@ class GNN:
         run.log({
             # must use top-level metric for sweep logging, see wandb sweep documentation
             'val_loss': val_loss,
-            'val_f1_score': metrics['val.f1-score'],
+            'val_f1_score': metrics['f1-score'],
             prefix: metrics
         })
         return metrics

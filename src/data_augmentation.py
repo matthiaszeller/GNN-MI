@@ -77,7 +77,7 @@ def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
         logging.info(f'copied {str(file_path)} to {save_path.joinpath(file_name)}')
         # Augment
         for i in range(1, k+1):
-            noise = torch.normal(mean=torch.ones(data.x.shape)*mean, std=std)
+            noise = torch.normal(mean=torch.ones(data.coord.shape)*mean, std=std)
             new_data = data.clone()
             new_data.coord += noise
             file_name = f'{file_path.stem}_NOISE{i}{file_path.suffix}'

@@ -8,7 +8,60 @@ Graph Neural Networks for Mycardial Infarction Prediction. Semester Project in [
 Forked from https://github.com/jacobbamberger/MI-proj.
 
 
-## Setup
+## Getting started
+
+1. Create the conda environment from `environment.yml`
+2. Mount the "source" data folder, i.e. the folder provided by the lab
+3. Create a data folder that will store the datasets
+4. Put the folder locations of the two previous steps in `src/data-path.txt`, see the "Path management" section below
+5. Create the datasets with `src/create_data.py`, see the "Data" section below 
+
+You're now ready to train models!
+One must now specify the configuration in one of the `yaml` file in the `config` folder. 
+One can run models in three ways as described below.
+
+### Train single model
+
+* Script `src/run_kfold.py`: run k-fold cross validation for a specific model
+* The template configuration are 
+`config/config*.yaml`, the parameters `cv.seed` and `cv.k_fold` must be specified
+* Example (use `--help` argument to see the script arguments):
+```shell
+python src/run_kfold.py config/config.yaml <name_of_wandb_job_type>
+```
+
+### Hyperparameter tuning
+
+There are two modes for hyperparameter tuning.
+They work with the "wandb agent" for sweeps (see the [docs](https://docs.wandb.ai/guides/sweeps)).
+One doesn't directly run a script, but rather start an agent with a yaml file specifying the grid of hyperparameters.
+The two modes differ in the way they explore the grid. 
+
+An agent is started with:
+```shell
+wandb sweep <configuration-file>.yaml
+```
+
+#### Coarse hyperparameter tuning
+
+This mode uses the *bayesian* search mode. Hyperparameters are specified with an a priori *distribution*,
+and the agent randomly samples from a posteriori distribution with respect to some reference metric. 
+
+The purpose of this mode is to quickly cover a large number of hyperparameter combinations,
+and monitor performance with a **single validation set**, i.e. no k-fold.
+
+See a template configuration file in `config/sweep_coarse*.yaml`. 
+The agent will eventually call `src/run_sweep.py` (but don't do it yourself, this won't work).
+
+#### Finer hyperparameter tuning
+
+This mode should be run once the "coarse" hyperparameter tuning allowed to select plausible hyperparameters.
+The goal is now to monitor performance with **k-fold cross validation**, 
+so that we can assess the model variability.
+
+See a template configuration file in `config/sweep_kfold*.yaml`.
+The agent will eventually call `src/run_sweep_kfold.py`.
+
 
 ## Logging
 
@@ -28,7 +81,7 @@ logging.basicConfig(
 )
 ```
 
-### Path management
+## Path management
 
 In the code, the data paths are retrieved with the function `get_data_path()` from `src.setup`.
 The repo is designed so that two workflows are possible:

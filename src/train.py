@@ -12,7 +12,7 @@ from torch_geometric.loader import DataLoader
 
 import setup
 from datasets import PatientDataset
-from models import NoPhysicsGnn, EGNN, GNNBase, checkpoint_model
+from models import EGNN, GNNBase, checkpoint_model, GIN_GNN
 
 
 class GNN:
@@ -63,6 +63,7 @@ class GNN:
         self.ratio = 1.0  # only useful for phys models
 
         if self.model_type == 'NoPhysicsGnn':
+            raise NotImplementedError
             self.physics = False
             self.automatic_update = False
             self.model = NoPhysicsGnn(train_set)
@@ -75,6 +76,14 @@ class GNN:
                               num_node_features=train_set.num_node_features,
                               num_equiv=config['num_equiv'],
                               num_gin=config['num_gin'])
+        elif self.model_type == 'GIN':
+            self.physics = False
+            self.automatic_update = False
+            self.model = GIN_GNN(num_classes=train_set.num_classes,
+                                 num_hidden_dim=config['num_hidden_dim'],
+                                 num_graph_features=config['dataset.num_graph_features'],
+                                 num_node_features=train_set.num_node_features,
+                                 num_gin=config['num_gin'])
         else:
             raise ValueError('unrecognized model type')
 

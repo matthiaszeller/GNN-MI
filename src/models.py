@@ -147,31 +147,50 @@ class EGNN(GNNBase):
         return x
 
 
-class NoPhysicsGnn(GNNBase):
-    """
-    Model for WssToCnc and CoordToCnc.
-    CoordToCnc is also called GIN in Jacob's report.
-    """
+class GIN_GNN(GNNBase):
+    def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int,
+                 num_node_features: int = 0, num_gin: int = 2):
+        """
+        @param num_classes: see BaseGNN
+        @param num_node_features: number of features per node
+        @param num_equiv: number of E_GCL layers
+        @param num_gin: number of gin layers
+        """
+        super().__init__(num_classes=num_classes,
+                         num_hidden_dim=num_hidden_dim,
+                         num_graph_features=num_graph_features,
+                         num_pooling_ops=2)
 
-    def __init__(self, dataset):
-        super().__init__(dataset)
-        self.gin_input = self.get_GIN(3, 16, 16)
-        self.gin16 = self.get_GIN(16, 16, 16)
+        self.num_gin = num_gin
+        self.num_hidden_dim = num_hidden_dim
+        self.num_node_features = num_node_features
 
-    def forward(self, x, edge_index, batch, segment):
-        x = self.gin_input(x, edge_index)
-        x = F.elu(x, alpha=0.1)
+        self.gin_layers = nn.Sequential('x, edge_index',
+            [
+                (
+                    # +3 because of x-y-z coordinates
+                    GINActivatedModule(self.num_node_features + 3, self.num_hidden_dim, self.num_hidden_dim),
+                    'x, edge_index -> x, edge_index'
+                )
+            ] + [
+                (
+                    GINActivatedModule(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim),
+                    'x, edge_index -> x, edge_index'
+                )
+                for _ in range(num_gin)
+            ]
+        )
 
-        x = self.gin16(x, edge_index)
-        x = F.elu(x, alpha=0.1)
+    def forward(self, h0, coord0, g0, edge_index, batch):
+        """See GNNBase for arguments description."""
+        gin_input = torch.cat((h0, coord0), dim=1)
+        h, _ = self.gin_layers(gin_input, edge_index)
 
-        x = self.gin16(x, edge_index)
-        x = F.elu(x, alpha=0.1)
-        x1 = self.gmp(x, batch)
-        x2 = self.gap(x, batch)
+        # Graph pooling operations
+        x1 = self.gmp(h, batch)
+        x2 = self.gap(h, batch)
 
-        x = torch.cat([x1, x2], dim=1)
-        x = torch.cat((x, segment.view(-1, 1)), dim=1)  # TODO: Change this into a one-hot-encoding
+        x = torch.cat((x1, x2, g0), dim=1)  # TODO: Change this into a one-hot-encoding
         x = self.classifier(x)
         return x
 
@@ -189,6 +208,12 @@ if __name__ == '__main__':
         'num_graph_features': 3,
         'num_gin': 2,
     }
+    params_GIN = {
+        'num_classes': 2,
+        'num_hidden_dim': 8,
+        'num_graph_features': 3,
+        'num_gin': 2,
+    }
 
     # --- Pass sample of CoordToCnc dataset through model
     sample = torch.load(path.joinpath('sample_coordtocnc.pt'))
@@ -197,7 +222,8 @@ if __name__ == '__main__':
     sample2.y = 0
     sample2.g_x[0, 2] = 1.0
     params_EGNN['num_node_features'] = sample.x.shape[1]
-    model = EGNN(**params_EGNN)
+    #model = EGNN(**params_EGNN)
+    model = GIN_GNN(**params_EGNN)
     model.eval()
     for data in DataLoader([sample, sample2], batch_size=2):
         output_wss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
@@ -205,15 +231,18 @@ if __name__ == '__main__':
     # --- Pass sample of WssToCnc dataset through model
     sample = torch.load(path.joinpath('sample_wss.pt'))
     params_EGNN['num_node_features'] = sample.x.shape[1]
-    model = EGNN(**params_EGNN)
+    #model = EGNN(**params_EGNN)
+    model = GIN_GNN(**params_EGNN)
     model.eval()
     for data in DataLoader([sample], batch_size=1):
         output_nowss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
 
     # -- Checkpoint and restore a copy of the model
-    checkpoint_model('test_checkpoint.pt', model, torch.optim.Adam(model.parameters()), 100, dict())
+    checkpoint_model('test_checkpoint.pt', model.state_dict(),
+                     torch.optim.Adam(model.parameters()).state_dict(), 100, dict())
     checkpoint = torch.load('test_checkpoint.pt')
-    restored = EGNN(**params_EGNN)
+    #restored = EGNN(**params_EGNN)
+    restored = GIN_GNN(**params_EGNN)
     restored.load_state_dict(checkpoint['model_state_dict'])
     restored.eval()
     # Check if this yields the same output

@@ -37,7 +37,12 @@ class MasterNode(torch.nn.Module):
 
         self.nodes_to_master = Linear(self.input_dim, self.hidden_dim)
 
-        self.weights = torch.nn.Conv1d(in_channels=self.n_pooling_ops, out_channels=1, kernel_size=1)
+        #self.weights = torch.nn.Conv1d(in_channels=self.hidden_dim, out_channels=1, kernel_size=(self.n_pooling_ops,))
+
+        self.weights = torch.nn.Conv1d(in_channels=self.n_pooling_ops, out_channels=1, kernel_size=(1,))
+
+        #self.weights = torch.nn.Conv2d(in_channels=self.hidden_dim, out_channels=1, kernel_size=(self.n_pooling_ops,))
+
         #self.weights = Linear(self.n_pooling_ops, self.output_dim)
 
     def forward(self, h: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
@@ -57,6 +62,7 @@ class MasterNode(torch.nn.Module):
         # x is              N_batch x N_pool x D_hidden, number of pooling ops N_pool = 2 (mean, max)
 
         # Weight the contribution of the pooled signal to the D_hidden components of h
+        # TODO weights kernel size should be D_hidden
         h_perturbation = ELU()(self.weights(x))
         h_perturbation = h_perturbation.squeeze(dim=1)
 
@@ -65,7 +71,9 @@ class MasterNode(torch.nn.Module):
         # h_pert is         N_batch x D_hidden
 
         # Flow information from master node to nodes
-        h += h_perturbation[batch]
+        # First, "tile" the perturbation network
+        h_perturbation = torch.index_select(h_perturbation, dim=0, index=batch)
+        h = h + h_perturbation
 
         return h, edge_index, batch
 

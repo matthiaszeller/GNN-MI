@@ -118,7 +118,8 @@ class E_GCL(nn.Module):
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
         h, agg = self.node_model(h, edge_index, edge_feat, node_attr, coord.size(0))
 
-        return h, coord, edge_attr
+        return h, edge_index, coord
+        #return h, coord, edge_attr
 
 
 class EGNN(nn.Module):

@@ -111,12 +111,12 @@ class EGNN(GNNBase):
                # First module handled separately because of input dimension
                (
                    E_GCL(self.num_node_features, self.num_hidden_dim, self.num_hidden_dim, tanh=False, residual=False),
-                   'h, edge_index, coord -> h, coord, edge_attr')
+                   'h, edge_index, coord -> h, edge_index, coord')
            ] + [
                # Then add as many modules as necessary
                (
                    E_GCL(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim, tanh=False),
-                   'h, edge_index, coord -> h, coord, edge_attr'
+                   'h, edge_index, coord -> h, edge_index, coord'
                ) for _ in range(num_equiv - 1)
            ]
         )
@@ -132,8 +132,7 @@ class EGNN(GNNBase):
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
-        # TODO check node_attr vs h
-        h, x, edge_attr = self.equiv(h0, edge_index, coord0)
+        h, _, coord = self.equiv(h0, edge_index, coord0)
 
         if self.num_gin > 0:
             h, _ = self.gin_layers(h, edge_index)
@@ -239,7 +238,7 @@ if __name__ == '__main__':
 
     # -- Checkpoint and restore a copy of the model
     checkpoint_model('test_checkpoint.pt', model.state_dict(),
-                     torch.optim.Adam(model.parameters()).state_dict(), 100, dict())
+                     torch.optim.Adam(model.parameters()).state_dict(), 1, dict())
     checkpoint = torch.load('test_checkpoint.pt')
     #restored = EGNN(**params_EGNN)
     restored = GIN_GNN(**params_EGNN)

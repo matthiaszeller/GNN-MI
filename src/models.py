@@ -24,6 +24,73 @@ def checkpoint_model(path, model_dict: OrderedDict, optimizer_dict: Dict, epoch:
     )
 
 
+class MasterNode(torch.nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, n_pooling_ops: int = 2):
+        super(MasterNode, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hidden_dim = hidden_dim
+        self.n_pooling_ops = n_pooling_ops
+
+        if self.n_pooling_ops != 2:
+            raise NotImplementedError
+
+        self.nodes_to_master = Linear(self.input_dim, self.hidden_dim)
+
+        self.weights = torch.nn.Conv1d(in_channels=self.n_pooling_ops, out_channels=1, kernel_size=1)
+        #self.weights = Linear(self.n_pooling_ops, self.output_dim)
+
+    def forward(self, h: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
+        # h is              N_nodes x D_hidden
+
+        # Flow information from nodes to master node
+        x = ELU()(self.nodes_to_master(h))
+
+        # x is              N_nodes x D_hidden
+
+        # Pool: each pooled vector is considered as a "channel" for convolution layers
+        x = torch.stack((
+            nn.global_max_pool(x, batch),
+            nn.global_mean_pool(x, batch)
+        ), dim=1)
+
+        # x is              N_batch x N_pool x D_hidden, number of pooling ops N_pool = 2 (mean, max)
+
+        # Weight the contribution of the pooled signal to the D_hidden components of h
+        h_perturbation = ELU()(self.weights(x))
+        h_perturbation = h_perturbation.squeeze(dim=1)
+
+        # There's a different perturbation for each graph, but the perturbation
+        # is the same for all nodes within a given graph
+        # h_pert is         N_batch x D_hidden
+
+        # Flow information from master node to nodes
+        h += h_perturbation[batch]
+
+        return h, edge_index, batch
+
+
+class Mastered_EGCL(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(Mastered_EGCL, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hidden_dim = hidden_dim
+
+        self.EGCL = E_GCL(input_nf=input_dim, output_nf=output_dim, hidden_nf=hidden_dim)
+        self.master_node = MasterNode(input_dim=output_dim, hidden_dim=hidden_dim, output_dim=output_dim)
+
+    def forward(self, h, edge_index, coord, batch):
+        h, edge_index, coord = self.EGCL(h, edge_index, coord)
+
+        h = ELU()(h)
+
+        # h, edge_index, batch -> only h changes
+        h, _, _ = self.master_node(h, edge_index, batch)
+
+        return h, edge_index, coord, batch
+
+
 class GINActivatedModule(nn.GINConv):
     def __init__(self, in_dim, h_dim, out_dim):
         MLP = Sequential(
@@ -107,19 +174,21 @@ class EGNN(GNNBase):
         assert self.num_equiv > 0
 
         self.equiv = nn.Sequential('h, edge_index, coord',
-           [
-               # First module handled separately because of input dimension
-               (
-                   E_GCL(self.num_node_features, self.num_hidden_dim, self.num_hidden_dim, tanh=False, residual=False),
-                   'h, edge_index, coord -> h, edge_index, coord')
-           ] + [
-               # Then add as many modules as necessary
-               (
-                   E_GCL(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim, tanh=False),
-                   'h, edge_index, coord -> h, edge_index, coord'
-               ) for _ in range(num_equiv - 1)
-           ]
-        )
+                                   [
+                                       # First module handled separately because of input dimension
+                                       (
+                                           E_GCL(self.num_node_features, self.num_hidden_dim, self.num_hidden_dim,
+                                                 tanh=False, residual=False),
+                                           'h, edge_index, coord -> h, edge_index, coord')
+                                   ] + [
+                                       # Then add as many modules as necessary
+                                       (
+                                           E_GCL(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim,
+                                                 tanh=False),
+                                           'h, edge_index, coord -> h, edge_index, coord'
+                                       ) for _ in range(num_equiv - 1)
+                                   ]
+                                   )
 
         if self.num_gin > 0:
             self.gin_layers = nn.Sequential('x, edge_index', [
@@ -142,6 +211,78 @@ class EGNN(GNNBase):
         x2 = self.gap(h, batch)
 
         x = torch.cat((x1, x2, g0), dim=1)  # TODO: Change this into a one-hot-encoding
+        x = self.classifier(x)
+        return x
+
+
+class EGNNMastered(GNNBase):
+    """
+    Equivariant Graph Neural Network composed of:
+        Sequential(<E_GCL layers>) -> Sequential(<GIN layer> -> elu -> ...)
+    The output of GIN layers are processed by the classifier of the parent class GNNBase.
+    """
+
+    def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int,
+                 num_node_features: int = 0, num_equiv: int = 2, num_gin: int = 2):
+        """
+        @param num_classes: see BaseGNN
+        @param num_node_features: number of features per node
+        @param num_equiv: number of E_GCL layers
+        @param num_gin: number of gin layers
+        """
+        super().__init__(num_classes=num_classes,
+                         num_hidden_dim=num_hidden_dim,
+                         num_graph_features=num_graph_features,
+                         num_pooling_ops=2)
+
+        self.num_gin = num_gin
+        self.num_equiv = num_equiv
+        self.num_hidden_dim = num_hidden_dim
+        self.num_node_features = num_node_features
+        assert self.num_equiv > 0
+
+        self.equiv = []
+        self.equiv.append(
+            (
+                Mastered_EGCL(input_dim=self.num_node_features, hidden_dim=self.num_hidden_dim, output_dim=self.num_hidden_dim),
+                'h, edge_index, coord, batch -> h, edge_index, coord, batch'
+            )
+        )
+        for _ in range(self.num_equiv - 1):
+            self.equiv.append(
+                (
+                    Mastered_EGCL(input_dim=self.num_hidden_dim, hidden_dim=self.num_hidden_dim,
+                                  output_dim=self.num_hidden_dim),
+                    'h, edge_index, coord, batch -> h, edge_index, coord, batch'
+                )
+            )
+
+        self.equiv = nn.Sequential(
+            'h, edge_index, coord, batch',
+            self.equiv
+        )
+
+        if self.num_gin > 0:
+            self.gin_layers = nn.Sequential('x, edge_index', [
+                (
+                    GINActivatedModule(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim),
+                    'x, edge_index -> x, edge_index'
+                )
+                for _ in range(num_gin)
+            ])
+
+    def forward(self, h0, coord0, g0, edge_index, batch):
+        """See GNNBase for arguments description."""
+        h, _, coord, batch = self.equiv(h0, edge_index, coord0, batch)
+
+        if self.num_gin > 0:
+            h, _ = self.gin_layers(h, edge_index)
+
+        # Graph pooling operations
+        x1 = self.gmp(h, batch)
+        x2 = self.gap(h, batch)
+
+        x = torch.cat((x1, x2, g0), dim=1)
         x = self.classifier(x)
         return x
 
@@ -218,35 +359,41 @@ if __name__ == '__main__':
     sample = torch.load(path.joinpath('sample_coordtocnc.pt'))
     sample.g_x = sample.g_x.reshape(1, -1)
     sample2 = sample.clone()
+    sample2.coord += torch.randn_like(sample2.coord) * 0.001
     sample2.y = 0
     sample2.g_x[0, 2] = 1.0
+    sample3 = sample.clone()
+    sample3.coord += torch.randn_like(sample2.coord) * 0.001
+    sample3.g_x[0, 2] = -1.0
     params_EGNN['num_node_features'] = sample.x.shape[1]
     #model = EGNN(**params_EGNN)
-    model = GIN_GNN(**params_EGNN)
+    #model = GIN_GNN(**params_EGNN)
+    model = EGNNMastered(**params_EGNN)
     model.eval()
-    for data in DataLoader([sample, sample2], batch_size=2):
+    for data in DataLoader([sample, sample2, sample3], batch_size=10):
         output_wss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
 
-    # --- Pass sample of WssToCnc dataset through model
-    sample = torch.load(path.joinpath('sample_wss.pt'))
-    params_EGNN['num_node_features'] = sample.x.shape[1]
-    #model = EGNN(**params_EGNN)
-    model = GIN_GNN(**params_EGNN)
-    model.eval()
-    for data in DataLoader([sample], batch_size=1):
-        output_nowss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
 
-    # -- Checkpoint and restore a copy of the model
-    checkpoint_model('test_checkpoint.pt', model.state_dict(),
-                     torch.optim.Adam(model.parameters()).state_dict(), 1, dict())
-    checkpoint = torch.load('test_checkpoint.pt')
-    #restored = EGNN(**params_EGNN)
-    restored = GIN_GNN(**params_EGNN)
-    restored.load_state_dict(checkpoint['model_state_dict'])
-    restored.eval()
-    # Check if this yields the same output
-    for data in DataLoader([sample], batch_size=1):
-        output_nowss_compare = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
-
-    torch.testing.assert_allclose(output_nowss, output_nowss_compare)
+    # # --- Pass sample of WssToCnc dataset through model
+    # sample = torch.load(path.joinpath('sample_wss.pt'))
+    # params_EGNN['num_node_features'] = sample.x.shape[1]
+    # #model = EGNN(**params_EGNN)
+    # model = GIN_GNN(**params_EGNN)
+    # model.eval()
+    # for data in DataLoader([sample], batch_size=1):
+    #     output_nowss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+    #
+    # # -- Checkpoint and restore a copy of the model
+    # checkpoint_model('test_checkpoint.pt', model.state_dict(),
+    #                  torch.optim.Adam(model.parameters()).state_dict(), 1, dict())
+    # checkpoint = torch.load('test_checkpoint.pt')
+    # #restored = EGNN(**params_EGNN)
+    # restored = GIN_GNN(**params_EGNN)
+    # restored.load_state_dict(checkpoint['model_state_dict'])
+    # restored.eval()
+    # # Check if this yields the same output
+    # for data in DataLoader([sample], batch_size=1):
+    #     output_nowss_compare = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+    #
+    # torch.testing.assert_allclose(output_nowss, output_nowss_compare)
 

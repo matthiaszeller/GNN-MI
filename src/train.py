@@ -1,5 +1,4 @@
 
-
 import logging
 from pathlib import Path
 from typing import Dict, Any, Union, Tuple, List, OrderedDict
@@ -12,7 +11,7 @@ from torch_geometric.loader import DataLoader
 
 import setup
 from datasets import PatientDataset
-from models import EGNN, GNNBase, checkpoint_model, GIN_GNN
+from models import EGNN, GNNBase, checkpoint_model, GIN_GNN, Mastered_EGCL, EGNNMastered
 
 
 class GNN:
@@ -76,6 +75,15 @@ class GNN:
                               num_node_features=train_set.num_node_features,
                               num_equiv=config['num_equiv'],
                               num_gin=config['num_gin'])
+        elif self.model_type == 'EquivMastered':
+            self.physics = False
+            self.automatic_update = False
+            self.model = EGNNMastered(num_classes=train_set.num_classes,
+                              num_hidden_dim=config['num_hidden_dim'],
+                              num_graph_features=config['dataset.num_graph_features'],
+                              num_node_features=train_set.num_node_features,
+                              num_equiv=config['num_equiv'],
+                              num_gin=config['num_gin'])
         elif self.model_type == 'GIN':
             self.physics = False
             self.automatic_update = False
@@ -87,6 +95,7 @@ class GNN:
         else:
             raise ValueError('unrecognized model type')
 
+        logging.info(f'\nUsing model:\n{self.model}')
         self.model.to(self.device)
 
         # Debugging
@@ -132,7 +141,7 @@ class GNN:
             metrics=validation_metrics
         )
         # Save file in wandb
-        #run.save(file_path)
+        # run.save(file_path)
 
     @staticmethod
     def calculate_binary_classif_metrics(y_pred, y_true) -> Dict[str, float]:

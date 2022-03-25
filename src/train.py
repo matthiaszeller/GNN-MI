@@ -12,7 +12,7 @@ from torch_geometric.loader import DataLoader
 import setup
 from datasets import PatientDataset
 from models import EGNN, GNNBase, checkpoint_model, GIN_GNN, Mastered_EGCL, EGNNMastered
-
+from utils import get_model_num_params
 
 class GNN:
     """
@@ -96,7 +96,7 @@ class GNN:
             raise ValueError('unrecognized model type')
 
         logging.info(f'\nUsing model:\n{self.model}')
-        logging.info(f'number of params: {get_model_num_params()}')
+        logging.info(f'number of params: {get_model_num_params(self.model)}')
         self.model.to(self.device)
 
         # Debugging

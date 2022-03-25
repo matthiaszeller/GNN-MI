@@ -9,6 +9,7 @@ from torch.nn import Linear, ELU, ReLU, Dropout, BatchNorm1d, Sequential, Softma
 
 import setup
 from egnn import E_GCL
+from utils import get_model_num_params
 
 
 def checkpoint_model(path, model_dict: OrderedDict, optimizer_dict: Dict, epoch: int, metrics: Dict):
@@ -22,6 +23,27 @@ def checkpoint_model(path, model_dict: OrderedDict, optimizer_dict: Dict, epoch:
         },
         path
     )
+
+
+class GraphPooler(torch.nn.Module):
+    def __init__(self, input_dim: int, mean_pooler: bool = True, max_pooler: bool = True, max_norm_pooler: bool = True):
+        super(GraphPooler, self).__init__()
+        self.pooling_ops = []
+
+        self.output_dim = 0
+        if mean_pooler:
+            self.pooling_ops.append(nn.global_mean_pool)
+            self.output_dim += input_dim
+        if max_pooler:
+            self.pooling_ops.append(nn.global_max_pool)
+            self.output_dim += input_dim
+
+    def forward(self, x: torch.Tensor, batch: torch.Tensor):
+        out = torch.concat([
+            operation(x, batch) for operation in self.pooling_ops
+        ], dim=-1)
+
+        return out
 
 
 class MasterNode(torch.nn.Module):
@@ -86,12 +108,15 @@ class Mastered_EGCL(torch.nn.Module):
         self.hidden_dim = hidden_dim
 
         self.EGCL = E_GCL(input_nf=input_dim, output_nf=output_dim, hidden_nf=hidden_dim)
+        self.batch_norm = BatchNorm1d(num_features=output_dim)
         self.master_node = MasterNode(input_dim=output_dim, hidden_dim=hidden_dim, output_dim=output_dim)
 
     def forward(self, h, edge_index, coord, batch):
         h, edge_index, coord = self.EGCL(h, edge_index, coord)
 
         h = ELU()(h)
+
+        h = self.batch_norm(h)
 
         # h, edge_index, batch -> only h changes
         h, _, _ = self.master_node(h, edge_index, batch)
@@ -139,7 +164,8 @@ class GNNBase(torch.nn.Module):
             #Dropout(p=0.5),
             Linear(self.num_pooling_ops * num_hidden_dim + num_graph_features, num_hidden_dim_classif),
             ELU(alpha=0.1),
-            Dropout(p=0.5),
+            BatchNorm1d(num_hidden_dim_classif),
+            #Dropout(p=0.5),
             Linear(num_hidden_dim_classif, num_classes),
             Softmax(dim=1)
         )
@@ -238,6 +264,7 @@ class EGNNMastered(GNNBase):
         @param num_equiv: number of E_GCL layers
         @param num_gin: number of gin layers
         """
+
         super().__init__(num_classes=num_classes,
                          num_hidden_dim=num_hidden_dim,
                          num_graph_features=num_graph_features,
@@ -245,8 +272,8 @@ class EGNNMastered(GNNBase):
 
         self.num_gin = num_gin
         self.num_equiv = num_equiv
-        self.num_hidden_dim = num_hidden_dim
         self.num_node_features = num_node_features
+        self.num_hidden_dim = num_hidden_dim
         assert self.num_equiv > 0
 
         self.equiv = []
@@ -279,6 +306,18 @@ class EGNNMastered(GNNBase):
                 for _ in range(num_gin)
             ])
 
+        self.pooler = GraphPooler(self.num_hidden_dim)
+        self.classifier = Sequential(
+            # Dropout(p=0.5),
+            Linear(self.pooler.output_dim + num_graph_features, self.num_hidden_dim),
+            ELU(alpha=0.1),
+            BatchNorm1d(self.num_hidden_dim),
+            # Dropout(p=0.5),
+            Linear(self.num_hidden_dim, num_classes),
+            Softmax(dim=1)
+        )
+
+
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
         h, _, coord, batch = self.equiv(h0, edge_index, coord0, batch)
@@ -287,10 +326,11 @@ class EGNNMastered(GNNBase):
             h, _ = self.gin_layers(h, edge_index)
 
         # Graph pooling operations
-        x1 = self.gmp(h, batch)
-        x2 = self.gap(h, batch)
+        #x1 = self.gmp(h, batch)
+        #x2 = self.gap(h, batch)
+        pooled = self.pooler(h, batch)
 
-        x = torch.cat((x1, x2, g0), dim=1)
+        x = torch.cat((pooled, g0), dim=1)
         x = self.classifier(x)
         return x
 
@@ -377,6 +417,8 @@ if __name__ == '__main__':
     #model = EGNN(**params_EGNN)
     #model = GIN_GNN(**params_EGNN)
     model = EGNNMastered(**params_EGNN)
+    print(model)
+    print(get_model_num_params(model), 'parameters')
     model.eval()
     for data in DataLoader([sample, sample2, sample3], batch_size=10):
         output_wss = model(data.x, data.coord, data.g_x, data.edge_index, data.batch)

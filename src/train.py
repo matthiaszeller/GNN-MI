@@ -96,6 +96,7 @@ class GNN:
             raise ValueError('unrecognized model type')
 
         logging.info(f'\nUsing model:\n{self.model}')
+        logging.info(f'number of params: {get_model_num_params()}')
         self.model.to(self.device)
 
         # Debugging

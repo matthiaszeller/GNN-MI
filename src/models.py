@@ -37,6 +37,8 @@ class GraphPooler(torch.nn.Module):
         if max_pooler:
             self.pooling_ops.append(nn.global_max_pool)
             self.output_dim += input_dim
+        if max_norm_pooler:
+            pass # TODO
 
     def forward(self, x: torch.Tensor, batch: torch.Tensor):
         out = torch.concat([
@@ -312,11 +314,10 @@ class EGNNMastered(GNNBase):
             Linear(self.pooler.output_dim + num_graph_features, self.num_hidden_dim),
             ELU(alpha=0.1),
             BatchNorm1d(self.num_hidden_dim),
-            # Dropout(p=0.5),
+            Dropout(p=0.1),
             Linear(self.num_hidden_dim, num_classes),
             Softmax(dim=1)
         )
-
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
@@ -392,7 +393,7 @@ if __name__ == '__main__':
     path = setup.get_project_root_path().joinpath('data/')
     params_EGNN = {
         'num_classes': 2,
-        'num_hidden_dim': 8,
+        'num_hidden_dim': 16,
         'num_graph_features': 3,
         'num_gin': 2,
     }

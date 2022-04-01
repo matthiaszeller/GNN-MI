@@ -274,7 +274,7 @@ class GNN:
                 data = data.to(self.device)
                 loss, aux_loss, y_pred = self.get_losses(data)
                 pred = y_pred.argmax(dim=1)
-                pred_buffer.append(pred.numpy())
+                pred_buffer.append(pred.cpu().detach().numpy())
                 ys_pred.append(pred.cpu().detach().numpy())
                 ys_true.append(data.y.cpu().detach().numpy())
                 running_loss.append(loss.detach().cpu().item())

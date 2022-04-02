@@ -1,11 +1,25 @@
 import logging
 from itertools import product
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 import torch.nn
 import yaml
 
 from datasets import PatientDataset
+
+
+def unnest_json_config(json_config: Dict[str, Any]) -> Dict[str, Any]:
+    """When loading wandb config with run.json_config, we get some 'value' and 'desc' fields, just get values"""
+    output = {
+        key: subdict['value'] for key, subdict in json_config.items()
+    }
+    return output
+
+
+def display_json_config(json_config: Dict[str, Any]) -> str:
+    max_keylength = max(map(str.__len__, json_config.keys()))
+    desc = '\n'.join(f'- {k:<{max_keylength}} = {v}' for k, v in json_config.items())
+    return desc
 
 
 def get_model_num_params(model: torch.nn.Module, only_requires_grad: bool = True):

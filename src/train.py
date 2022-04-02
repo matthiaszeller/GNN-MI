@@ -47,8 +47,18 @@ class GNN:
             train_set: PatientDataset,
             valid_set: PatientDataset,
             test_set: Union[PatientDataset, None] = None,
-            model_save_path: Union[str, Path] = None
+            model_save_path: Union[str, Path] = None,
+            standardize: bool = True
     ):
+        """
+        :param config:
+        :param train_set:
+        :param valid_set:
+        :param test_set:
+        :param model_save_path:
+        :param standardize: should always be true, except if you're in test mode and do several runs with
+        different initializations
+        """
         dev = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(dev)
         logging.info(f'Using device: {self.device}')
@@ -112,7 +122,8 @@ class GNN:
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
         self.epoch = None
 
-        self.standardize_node_features()
+        if standardize:
+            self.standardize_node_features()
 
     def standardize_node_features(self):
         if self.train_loader.dataset.num_node_features == 0:
@@ -121,7 +132,10 @@ class GNN:
         logging.info('standardizing nodes features...')
         train_mean, train_std = self.train_loader.dataset.standardize()
         logging.info(f'training means and stds:\n{train_mean}\n{train_std}')
+        # Apply standardization based on training values
         self.val_loader.dataset.standardize(train_mean, train_std)
+        if self.test_loader is not None:
+            self.test_loader.dataset.standardize(train_mean, train_std)
 
     def save_model(self, state_dic: OrderedDict, optimizer_dic: Dict, epoch: int,
                    validation_metrics: Dict, run: wandb.sdk.wandb_run.Run):

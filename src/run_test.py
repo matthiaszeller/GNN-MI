@@ -85,6 +85,8 @@ for i in range(config['cv.test_reps']):
         train_set=train_set,
         valid_set=val_set,
         test_set=test_set,
+        # only standardize data the first run, splits are the same across all runs
+        standardize=True if i == 0 else False
     )
 
     # --- Train

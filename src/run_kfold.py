@@ -47,8 +47,9 @@ if 'job_type' in args:
     job_type = args.job_type
 else:
     job_type = None
-    if args.run_id is not None:
-        job_type = f'kfold-{args.run_id}'
+
+if (job_type is None) and (args.run_id is not None):
+    job_type = f'kfold-{args.run_id}'
 
 logging.info(f'wandb job type: \n{job_type}\n\n')
 

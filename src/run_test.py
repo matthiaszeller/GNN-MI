@@ -2,6 +2,7 @@
 
 """
 import argparse
+import json
 import logging
 import string
 from random import choices
@@ -10,24 +11,48 @@ import wandb
 import yaml
 
 import setup
+import utils
 from datasets import split_data
 from train import GNN
 
 
 # --- Argument parsing
 parser = argparse.ArgumentParser()
-parser.add_argument('config', type=str, help='yaml config file')
+parser.add_argument('config', type=str, help='yaml config file', nargs='?')
+parser.add_argument('-i', '--run_id', help='wandb run id to base config on')
 args = parser.parse_args()
+
+if (args.config is None) == (args.run_id is None):
+    raise ValueError('should specify either config or run id, not both')
+
+
+# Specified config file
+if args.config is not None:
+    # --- Parse config
+    with open(args.config, 'r') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+else:
+    api = wandb.Api()
+    run = api.run(f'{setup.WANDB_SETTINGS["entity"]}/{setup.WANDB_SETTINGS["project"]}/{args.run_id}')
+    config = json.loads(run.json_config)
+    config = utils.unnest_json_config(config)
+
+    if 'cv.test_reps' not in config or \
+       not isinstance(config['cv.test_reps'], int):
+        logging.info('setting default value for cv.test_reps!')
+        config['cv.test_reps'] = setup.CONFIG_DEFAULT_TEST_REPS
+
+    desc = utils.display_json_config(config)
+    logging.info(f'got config from run:\n{desc}')
+
 
 # --- Generate job type
 random_id = ''.join(choices(string.ascii_lowercase + string.digits, k=6))
 job_type = f'test-{random_id}'
 
-logging.info(f'job type is {job_type}')
+logging.info(f'job type is \n{job_type}\n\n')
 
-# --- Parse config
-with open(args.config, 'r') as f:
-    config = yaml.load(f, Loader=yaml.FullLoader)
 
 # --- Data splitting
 test_set, ((train_set, val_set),) = split_data(

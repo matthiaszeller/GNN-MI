@@ -13,6 +13,7 @@ logging.basicConfig(
 
 
 CONFIG_DEFAULT_K_FOLD = 5
+CONFIG_DEFAULT_TEST_REPS = 10
 
 
 def get_project_root_path():

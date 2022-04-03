@@ -141,9 +141,36 @@ class PatientDataset(TorchDataset):
                 raise ValueError(f'data has shape {self._data[0].x.shape[1]} '
                                  f'but num feature is {self.num_node_features}')
         else:
+            # Because of data standardization, just don't handle it in the end
+            raise NotImplementedError
             # TODO better handle this case
             # TODO chekc above comment about sanity check and num_node_features
             logging.warning('PatientDataset.in_memory set to False, this is highly inefficient')
+
+    def standardize(self, mean: float = None, std: float = None):
+        """
+        Standardize the data, two modes:
+        - mean and std is given, use those to standardize (typically for val/test sets)
+        - no input is given, standardize with `self` values and return mean, std (typically done for train set)
+        """
+        if (mean is None) != (std is None):
+            raise ValueError
+
+        return_stats = False
+        if mean is None:
+            return_stats = True
+            # Concatenate all data points
+            data = torch.concat([d.x for d in self._data])
+            # Compute self statistics
+            mean = data.mean(dim=0)
+            std = data.std(dim=0)
+
+        # Apply
+        for sample in self._data:
+            sample.x = (sample.x - mean) / std
+
+        if return_stats:
+            return mean, std
 
     @property
     def raw_file_names(self) -> Union[str, List[str], Tuple]:

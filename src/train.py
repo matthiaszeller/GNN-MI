@@ -14,6 +14,7 @@ from datasets import PatientDataset
 from models import EGNN, GNNBase, checkpoint_model, GIN_GNN, Mastered_EGCL, EGNNMastered
 from utils import get_model_num_params
 
+
 class GNN:
     """
     Base class that contains the model, and information about the model.
@@ -45,8 +46,18 @@ class GNN:
             train_set: PatientDataset,
             valid_set: PatientDataset,
             test_set: Union[PatientDataset, None] = None,
-            model_save_path: Union[str, Path] = None
+            model_save_path: Union[str, Path] = None,
+            standardize: bool = True
     ):
+        """
+        :param config:
+        :param train_set:
+        :param valid_set:
+        :param test_set:
+        :param model_save_path:
+        :param standardize: should always be true, except if you're in test mode and do several runs with
+        different initializations
+        """
         dev = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(dev)
         logging.info(f'Using device: {self.device}')
@@ -120,6 +131,21 @@ class GNN:
         # TODO: check consistency with last layer of classifier. (Seems to apply softmax twice.)
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
         self.epoch = None
+
+        if standardize:
+            self.standardize_node_features()
+
+    def standardize_node_features(self):
+        if self.train_loader.dataset.num_node_features == 0:
+            return
+
+        logging.info('standardizing nodes features...')
+        train_mean, train_std = self.train_loader.dataset.standardize()
+        logging.info(f'training means and stds:\n{train_mean}\n{train_std}')
+        # Apply standardization based on training values
+        self.val_loader.dataset.standardize(train_mean, train_std)
+        if self.test_loader is not None:
+            self.test_loader.dataset.standardize(train_mean, train_std)
 
     def save_model(self, state_dic: OrderedDict, optimizer_dic: Dict, epoch: int,
                    validation_metrics: Dict, run: wandb.sdk.wandb_run.Run):
@@ -267,13 +293,17 @@ class GNN:
         ys_pred, ys_true = [], []
         self.model.eval()
         with torch.no_grad():
+            pred_buffer = []
             for data in dataloader:
                 data = data.to(self.device)
                 loss, aux_loss, y_pred = self.get_losses(data)
                 pred = y_pred.argmax(dim=1)
+                pred_buffer.append(pred.cpu().detach().numpy())
                 ys_pred.append(pred.cpu().detach().numpy())
                 ys_true.append(data.y.cpu().detach().numpy())
                 running_loss.append(loss.detach().cpu().item())
+
+
 
         val_loss = float(np.mean(running_loss))
         ys_true = np.concatenate(ys_true)

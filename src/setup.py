@@ -12,6 +12,10 @@ logging.basicConfig(
 )
 
 
+CONFIG_DEFAULT_K_FOLD = 5
+CONFIG_DEFAULT_TEST_REPS = 10
+
+
 def get_project_root_path():
     # Hard-coded project structure: data location relative to this setup.py file
     return Path(__file__).parent.parent

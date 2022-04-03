@@ -5,6 +5,7 @@ import argparse
 import json
 import logging
 import string
+from copy import deepcopy
 from random import choices
 
 import wandb
@@ -55,28 +56,28 @@ logging.info(f'job type is \n{job_type}\n\n')
 
 
 # --- Data splitting
-test_set, ((train_set, val_set),) = split_data(
+test_set, split_list = split_data(
     path=setup.get_dataset_path(config['dataset.name']),
     num_node_features=config['dataset.num_node_features'],
     seed=config['cv.seed'],
-    cv=False,
-    valid_ratio=config['cv.valid_ratio'],
+    cv=True,
+    k_cross=config['cv.k_fold'],
     in_memory=config['dataset.in_memory']
 )
 
 
-for i in range(config['cv.test_reps']):
+for i, (train_set, val_set) in enumerate(split_list):
     run = wandb.init(**setup.WANDB_SETTINGS,
                      reinit=True,
                      group=f"model-{config['model.name']}",
                      job_type=job_type,
-                     name=f'run-{i + 1}',
+                     name=f'fold-{i + 1}',
                      config=config)
 
-    logging.info(f'Test model {i+1}/{config["cv.test_reps"]}')
+    logging.info(f'Test model fold {i+1}/{config["cv.k_fold"]}')
     logging.info(f'training set, length {len(train_set)}, {train_set.patients}')
     logging.info(f'validation set, length {len(val_set)}, {val_set.patients}')
-    logging.info(f'unused test set, length {len(test_set)}, {test_set.patients}')
+    logging.info(f'test set, length {len(test_set)}, {test_set.patients}')
 
     # --- Model initialization
     logging.debug('model initialization')
@@ -84,9 +85,8 @@ for i in range(config['cv.test_reps']):
         config=config,
         train_set=train_set,
         valid_set=val_set,
-        test_set=test_set,
-        # only standardize data the first run, splits are the same across all runs
-        standardize=True if i == 0 else False
+        test_set=deepcopy(test_set), # Must copy, because test set must be standardized w.r.t. each fold independently
+        standardize=True
     )
 
     # --- Train

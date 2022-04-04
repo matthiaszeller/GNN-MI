@@ -1,11 +1,13 @@
+
+
 import logging
-import os
 from pathlib import Path
 
 import numpy as np
 import scipy.sparse
 import torch
 from scipy.spatial import distance_matrix
+from torch_geometric.utils import is_undirected
 from vtk.util.numpy_support import vtk_to_numpy
 
 import setup
@@ -104,7 +106,7 @@ def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
 
 
 if __name__ == '__main__':
-    from torch_geometric.utils import to_scipy_sparse_matrix, is_undirected
+    from torch_geometric.utils import to_scipy_sparse_matrix
 
     path = setup.get_dataset_path('CoordToCnc_KNN5')
 

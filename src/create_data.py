@@ -10,6 +10,7 @@ import pandas as pd
 import pickle
 import torch
 import vtk
+from torch_geometric import utils
 from torch_geometric.data import Data
 from vtk.util.numpy_support import vtk_to_numpy
 
@@ -115,10 +116,14 @@ def get_edge_index(surface):
                                keepdims=True)],
                        axis=1)
     E = np.unique(E, axis=0)
-    E_rev = np.concatenate([np.max(E, axis=1, keepdims=True),
-                            np.min(E, axis=1, keepdims=True)],
-                           axis=1)
+    # Sanity check: no self loop
+    assert (E[:, 0] == E[:, 1]).any() == False
+    # We have undirected graph -> build reverse edges
+    E_rev = E[:, [1, 0]]
     E = np.concatenate((E, E_rev))
+    # Sanity check
+    assert utils.is_undirected(torch.from_numpy(E.T))
+
     return E
 
 

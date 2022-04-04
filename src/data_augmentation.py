@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import scipy.sparse
 import torch
 from scipy.spatial import distance_matrix
 from vtk.util.numpy_support import vtk_to_numpy
@@ -10,17 +11,48 @@ from vtk.util.numpy_support import vtk_to_numpy
 import setup
 
 
-def adjacency_matrix_to_edge_list(A):
-    """Translates adjacency matrix to edge list"""
-    edges = np.array(np.nonzero(A))
-    return torch.from_numpy(edges).type(torch.LongTensor)
+def transition_matrix(A: scipy.sparse.spmatrix, type='randomwalk'):
+    if type != 'randomwalk':
+        raise ValueError
+
+    # T_rw = A D^-1, D is diagonal with D_ii = sum of row i of A
+    # Compute Dinv
+    D = A.sum(axis=1)
+    # Remove unused dimension
+    D = np.array(D).squeeze()
+    Dinv = scipy.sparse.diags(1/D)
+
+    T = A @ Dinv
+    return T
+
+
+def diffusion(T, param, n, type='pagerank'):
+    if type == 'pagerank':
+        coef_k = lambda k: param * (1 - param) ** k
+    else:
+        raise ValueError
+
+    # Matrix storing powers of T
+    # First power is identity
+    m = T.shape[0]
+    Tpowk = scipy.sparse.eye(m)
+    # S will collect weighted sum of powers
+    S = Tpowk * coef_k(0)
+
+    for k in range(1, n+1):
+        # Increase power
+        Tpowk = Tpowk @ T
+        S += coef_k(k) * Tpowk
+
+    return S
 
 
 def create_knn_data(surface, k_neighbours):
     """Implements data augmentation using KNN algorithm"""
     coordinates = vtk_to_numpy(surface.GetPoints().GetData())
     distance_mat = distance_matrix(coordinates, coordinates, 2)
-    nearest_neigh = np.argsort(distance_mat, axis=1)[:, :k_neighbours]
+    # Nearest neighbours: discard first element which is the node itself (having distance zero with itself)
+    nearest_neigh = np.argsort(distance_mat, axis=1)[:, 1:k_neighbours+1]
     edges = np.array([[i, neighbour]
                      for i in range(len(nearest_neigh))
                      for neighbour in nearest_neigh[i]])
@@ -28,11 +60,12 @@ def create_knn_data(surface, k_neighbours):
                                    np.min(edges, axis=1, keepdims=True)],
                                   axis=1)
     sorted_edges = np.unique(sorted_edges, axis=0)
-    reversed_edges = np.concatenate([np.max(sorted_edges, axis=1, keepdims=True), 
-                                     np.min(sorted_edges, axis=1, keepdims=True)],
-                                    axis=1)
+    reversed_edges = sorted_edges[:, [1, 0]]
     edges = np.concatenate((sorted_edges, reversed_edges))
     edges = torch.from_numpy(edges.transpose()).type(torch.LongTensor)
+    # Sanity check: undirected graph, i.e. symmetric adjacency matrix
+    assert is_undirected(edges)
+
     return edges
 
 
@@ -40,21 +73,6 @@ def attribute_masking(segment_data, alpha):
     """Randomly masks the alpha-portion of the node features."""
     mask = np.random.binomial(1, 1-alpha, segment_data.shape)
     return torch.from_numpy(segment_data.numpy() * mask).type(torch.FloatTensor)
-
-
-def edge_perturbation(A, alpha):
-    """Randomly flips an alpha-portion of the edges"""
-    mask = np.random.binomial(1, 1 - alpha, A.shape)
-    A_perturbed = A * mask + (1 - A) * (1 - mask)
-    return adjacency_matrix_to_edge_list(A_perturbed)
-
-
-def edge_diffusion(A, alpha):
-    """Implements the edge diffusion algorithm for GNN data augmentation"""
-    num_nodes = len(A)
-    Dinv = np.diag(1 / np.sqrt(np.sum(A, axis=1)))
-    A_modified = alpha * np.linalg.inv(np.eye(num_nodes)-(1-alpha)*Dinv@A@Dinv)
-    return adjacency_matrix_to_edge_list(A_modified)
 
 
 @setup.arg_logger
@@ -84,3 +102,16 @@ def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
             torch.save(new_data, save_path.joinpath(file_name))
             logging.info(f'generated gaussian augmented data file {save_path.joinpath(file_name)}')
 
+
+if __name__ == '__main__':
+    from torch_geometric.utils import to_scipy_sparse_matrix, is_undirected
+
+    path = setup.get_dataset_path('CoordToCnc_KNN5')
+
+    for file in path.glob('*.pt'):
+        data = torch.load(file)
+        break
+
+    A = to_scipy_sparse_matrix(data.edge_index)
+    A = (A + A.T) / 2
+    T = transition_matrix(A)

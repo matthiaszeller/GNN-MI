@@ -294,7 +294,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
 
             # k_neighbours data aug:
             if k_neigh != 0:
-                edges = create_knn_data(surface, k_neigh)
+                edges = create_knn_data(coord, k_neigh)
                 data = Data(x=segment_data,
                             coord=coord,
                             g_x=graph_features,

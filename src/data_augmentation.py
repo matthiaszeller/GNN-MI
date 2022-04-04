@@ -7,7 +7,7 @@ import numpy as np
 import scipy.sparse
 import torch
 from scipy.spatial import distance_matrix
-from torch_geometric.utils import is_undirected
+from torch_geometric.utils import is_undirected, contains_self_loops
 from vtk.util.numpy_support import vtk_to_numpy
 
 import setup
@@ -49,26 +49,44 @@ def diffusion(T, param, n, type='pagerank'):
     return S
 
 
-def create_knn_data(surface, k_neighbours):
+def create_knn_data(coordinates, k_neighbours):
     """Implements data augmentation using KNN algorithm"""
-    coordinates = vtk_to_numpy(surface.GetPoints().GetData())
     distance_mat = distance_matrix(coordinates, coordinates, 2)
-    # Nearest neighbours: discard first element which is the node itself (having distance zero with itself)
-    nearest_neigh = np.argsort(distance_mat, axis=1)[:, 1:k_neighbours+1]
-    edges = np.array([[i, neighbour]
-                     for i in range(len(nearest_neigh))
-                     for neighbour in nearest_neigh[i]])
-    sorted_edges = np.concatenate([np.max(edges, axis=1, keepdims=True),
-                                   np.min(edges, axis=1, keepdims=True)],
-                                  axis=1)
-    sorted_edges = np.unique(sorted_edges, axis=0)
-    reversed_edges = sorted_edges[:, [1, 0]]
-    edges = np.concatenate((sorted_edges, reversed_edges))
-    edges = torch.from_numpy(edges.transpose()).type(torch.LongTensor)
-    # Sanity check: undirected graph, i.e. symmetric adjacency matrix
-    assert is_undirected(edges)
+    # We don't want self loops, but diagonal of distance_max is full of zeros -> put infinity
+    np.fill_diagonal(distance_mat, np.inf)
 
-    return edges
+    # Nearest neighbours: use partition instead of sorting (efficient++)
+    # this is basically sorting but when we're only interested in the smallest `k_neighbours` values (unsorted)
+    nearest_neigh = np.argpartition(distance_mat, k_neighbours, axis=1)
+    # The first `k_neighbours` indices along second dimension are the nearest neighbours -> discard the rest
+    nearest_neigh = nearest_neigh[:, :k_neighbours]
+
+    # IMPORTANT NOTE: the relationship "belonging to a node's nearest neighbours" is not symmetric,
+    # i.e. the following statements
+    #   - node i is part of the k-nns of node j
+    #   - node j is part of the k-nns of node i
+    # do not imply each other
+    n_nodes = nearest_neigh.shape[0]
+    edge_list = np.array([
+        [i, nn]
+        for i in range(n_nodes)
+        for nn in nearest_neigh[i, :]
+    ])
+    # Symmetrization: add reversed edges
+    edge_list = np.concatenate(
+        (edge_list, edge_list[:, [1, 0]])
+    )
+    # Because of symmetrization, we might have added duplicate edges -> remove them
+    edge_list = np.unique(edge_list, axis=0)
+
+    # Convert to torch_geometric edge representation
+    edge_index = torch.from_numpy(edge_list.T)
+    # Sanity check: undirected graph, i.e. symmetric adjacency matrix
+    assert is_undirected(edge_index)
+    # Sanity check: no self loop
+    assert (not contains_self_loops(edge_index))
+
+    return edge_index
 
 
 def attribute_masking(segment_data, alpha):

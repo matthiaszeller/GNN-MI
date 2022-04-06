@@ -44,7 +44,7 @@ else:
     logging.info(f'got config from run:\n{desc}')
 
 # Display config
-utils.display_json_config(config)
+logging.info(f'config: \n{utils.display_json_config(config)}')
 
 if 'job_type' in args:
     job_type = args.job_type

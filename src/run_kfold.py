@@ -25,8 +25,8 @@ if (args.config is None) == (args.run_id is None):
 
 # Option 1: get config from yaml file
 if args.config is not None:
-    with open(args.config, 'r') as f:
-        config = yaml.load(f, yaml.FullLoader)
+    config = utils.read_config_file(args.config)
+
 # Option 2: copy config from run
 else:
     logging.info(f'getting config from run {args.run_id}')

@@ -1,7 +1,8 @@
 import json
 import logging
 from itertools import product
-from typing import List, Tuple, Dict, Any
+from pathlib import Path
+from typing import List, Tuple, Dict, Any, Union
 
 import torch.nn
 import wandb
@@ -61,6 +62,20 @@ def parse_json_config(run: wandb.apis.public.Run) -> Dict[str, Any]:
         template_config = yaml.load(f, Loader=yaml.FullLoader)
 
     config = reorder_config(config, template_config)
+    return config
+
+
+def read_config_file(fpath: Union[str, Path]) -> Dict[str, Any]:
+    fpath = Path(fpath)
+    if fpath.suffix == '.yaml':
+        with open(fpath, 'r') as f:
+            config = yaml.load(f, yaml.FullLoader)
+    elif fpath.suffix == '.json':
+        with open(fpath, 'r') as f:
+            config = json.load(f)
+    else:
+        raise ValueError('unrecognized extension')
+
     return config
 
 

@@ -4,10 +4,13 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import pygsp
 import scipy.sparse
 import torch
+from graph_coarsening import coarsen
 from scipy.spatial import distance_matrix
-from torch_geometric.utils import is_undirected, contains_self_loops
+from torch_geometric.data import Data
+from torch_geometric.utils import is_undirected, contains_self_loops, from_scipy_sparse_matrix
 from vtk.util.numpy_support import vtk_to_numpy
 
 import setup
@@ -123,15 +126,51 @@ def gaussian_noise(path_data, save_path, k=2, mean=0, std=0.1):
             logging.info(f'generated gaussian augmented data file {save_path.joinpath(file_name)}')
 
 
+# >>> Graph coarsening
+
+
+def coarsen_graph(data: Data, r=0.7, k=5, method: str = 'variation_neighborhood'):
+    if data.x.shape[1] > 0:
+        raise NotImplementedError('cannot infer new node attributes')
+
+    G = to_pygsp_graph(data)
+    N1, Ne1 = G.N, G.Ne
+    _, Gsparsed, *_ = coarsen(G, K=k, r=r, method=method)
+    N2, Ne2 = Gsparsed.N, Gsparsed.Ne
+    logging.info(f'coarsened graph: nodes {N1} -> {N2}, edges: {Ne1} -> {Ne2}')
+
+    data_coarsened = pygsp_to_data(original=data, G=Gsparsed)
+    return data_coarsened
+
+
+def to_pygsp_graph(data: Data):
+    A = to_scipy_sparse_matrix(data.edge_index)
+    G = pygsp.graphs.Graph(A, coords=data.coord)
+    return G
+
+
+def pygsp_to_data(original: Data, G: pygsp.graphs.graph.Graph):
+    """
+    Create new torch sample based on a PyGSP graph itself based on a torch sample.
+    G is a modified version of the original, but we first clone the original since it contains data not handled by PyGSP.
+    More clearly, we take edge index and coordinates from G, the rest from the original
+    """
+    edge_index, edge_weight = from_scipy_sparse_matrix(G.A)
+    data = original.clone()
+    data.edge_index = edge_index
+    data.coord = torch.from_numpy(G.coords)
+
+    return data
+
+
+# <<<
+
+
 if __name__ == '__main__':
     from torch_geometric.utils import to_scipy_sparse_matrix
 
-    path = setup.get_dataset_path('CoordToCnc_KNN5')
+    path = setup.get_dataset_path('CoordToCnc')
 
     for file in path.glob('*.pt'):
-        data = torch.load(file)
-        break
+        newdata = coarsen_graph(torch.load(file), r=0.7)
 
-    A = to_scipy_sparse_matrix(data.edge_index)
-    A = (A + A.T) / 2
-    T = transition_matrix(A)

@@ -21,7 +21,7 @@ def get_project_root_path():
     return Path(__file__).parent.parent
 
 
-def get_data_paths(force_local=False):
+def get_data_paths(force_local=False, path_out_only: bool = False):
     """Return a Path object pointing to the data folders: the reading and writing paths.
     By default, assumes the data path is located at the project root, in which case reading and writing paths are the same
     If you want to override this, create a file `data-path.txt` containing the paths:
@@ -35,9 +35,16 @@ def get_data_paths(force_local=False):
         if len(paths) != 2:
             raise ValueError('The data-path.txt file is incorrectly formatted, see docstring of setup.get_data_paths()')
 
+        # Check path existence
         path_in, path_out = tuple(map(Path, paths))
-        if not path_in.exists() or not path_out.exists():
-            raise ValueError('One of the data paths prescribed in `data-path.txt` does not exist')
+        if not path_out.exists():
+            raise ValueError('the output path described in `data-path.txt` does not exist')
+        # The input path is None'd if path_out_only is True
+        if path_out_only:
+            path_in = None
+        # Otherwise, check that input path exists
+        elif not path_in.exists():
+            raise ValueError('the input path described in `data-path.txt` does not exist')
 
         logging.info('get_data_path(): using user-defined data path')
         return path_in, path_out
@@ -48,7 +55,7 @@ def get_data_paths(force_local=False):
 
 
 def get_dataset_path(dataset_name: str):
-    _, path = get_data_paths()
+    _, path = get_data_paths(path_out_only=True)
     return path.joinpath(dataset_name)
 
 
@@ -85,6 +92,10 @@ WANDB_SETTINGS = {
     # the directory handled by wandb itself, distinct from parsed data
     'dir': WANDB_PATH
 }
+
+
+def get_wandb_run_path(run_id: str):
+    return f'{WANDB_SETTINGS["entity"]}/{WANDB_SETTINGS["project"]}/{run_id}'
 
 
 if __name__ == '__main__':

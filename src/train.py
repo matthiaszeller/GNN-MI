@@ -210,7 +210,16 @@ class GNN:
             running_loss = []
             ys_pred, ys_true = [], []
             # --- Training loop over batches
-            for data in self.train_loader:
+            for batch_idx, data in enumerate(self.train_loader):
+                # Small problem: if we're unlucky, the last batch may contain a single sample, batchnorm will fail and
+                #                raise an error. In this case, just ignore this last sample
+                #print(f'epoch {epoch_idx:<5} batch {batch_idx}')
+                # TODO find another workaround
+                if data.y.shape[0] == 1:
+                    logging.error(f'skipping batch {batch_idx} of epoch {epoch_idx} containing a single sample '
+                                  f'(because of Batchnorm)')
+                    continue
+
                 # Batch initialization
                 data = data.to(self.device)
                 self.optimizer.zero_grad()

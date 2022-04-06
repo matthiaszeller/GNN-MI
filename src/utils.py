@@ -1,11 +1,27 @@
+import json
 import logging
 from itertools import product
 from typing import List, Tuple, Dict, Any
 
 import torch.nn
+import wandb
 import yaml
 
+import setup
 from datasets import PatientDataset
+
+
+def get_run_config(run_id: str) -> Dict[str, Any]:
+    run = get_wandb_run(run_id)
+    config = parse_json_config(run)
+    return config
+
+
+def get_wandb_run(run_id: str) -> wandb.apis.public.Run:
+    run_path = setup.get_wandb_run_path(run_id)
+    api = wandb.Api()
+    run = api.run(run_path)
+    return run
 
 
 def unnest_json_config(json_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -16,11 +32,45 @@ def unnest_json_config(json_config: Dict[str, Any]) -> Dict[str, Any]:
     return output
 
 
+def reorder_config(json_config: Dict[str, Any], template_config: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict()
+    # Add the keys in order defined in template
+    for key in template_config.keys():
+        if key in json_config:
+            out[key] = json_config[key]
+
+    # Add keys that were not in template
+    for key in json_config.keys():
+        if key not in template_config:
+            out[key] = json_config[key]
+
+    return out
+
+
+def parse_json_config(run: wandb.apis.public.Run) -> Dict[str, Any]:
+    nested_config = json.loads(run.json_config)
+    config = unnest_json_config(nested_config)
+
+    path_config = setup.get_project_root_path().joinpath('config')
+    config_files = list(path_config.glob('config_*.yaml'))
+    if len(config_files) == 0:
+        return config
+
+    config_file = config_files[0]
+    with open(config_file) as f:
+        template_config = yaml.load(f, Loader=yaml.FullLoader)
+
+    config = reorder_config(config, template_config)
+    return config
+
+
 def display_json_config(json_config: Dict[str, Any]) -> str:
     max_keylength = max(map(str.__len__, json_config.keys()))
     desc = '\n'.join(f'- {k:<{max_keylength}} = {v}' for k, v in json_config.items())
     return desc
 
+
+# ------------------------------
 
 def get_model_num_params(model: torch.nn.Module, only_requires_grad: bool = True):
     n = 0
@@ -80,6 +130,5 @@ def grid_search(path_yaml_file):
 
 
 if __name__ == '__main__':
-    file = '../experiments/hyper_params.yaml'
-    for combination in grid_search(file):
-        print(combination)
+    run = get_wandb_run('uf34jb1p')
+    config = parse_json_config(run)

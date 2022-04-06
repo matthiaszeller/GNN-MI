@@ -30,18 +30,12 @@ if args.config is not None:
 # Option 2: copy config from run
 else:
     logging.info(f'getting config from run {args.run_id}')
-    api = wandb.Api()
-    run = api.run(f'{setup.WANDB_SETTINGS["entity"]}/{setup.WANDB_SETTINGS["project"]}/{args.run_id}')
-    config = json.loads(run.json_config)
-    config = utils.unnest_json_config(config)
+    config = utils.get_run_config(args.run_id)
 
     # kfold might be missing because the run could be from a coarse sweep
     if not isinstance(config['cv.k_fold'], int):
         logging.info(f'replacing k_fold with default value!')
         config['cv.k_fold'] = setup.CONFIG_DEFAULT_K_FOLD
-
-    desc = utils.display_json_config(config)
-    logging.info(f'got config from run:\n{desc}')
 
 # Display config
 logging.info(f'config: \n{utils.display_json_config(config)}')

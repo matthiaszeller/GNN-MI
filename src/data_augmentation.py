@@ -10,7 +10,7 @@ import torch
 from graph_coarsening import coarsen
 from scipy.spatial import distance_matrix
 from torch_geometric.data import Data
-from torch_geometric.utils import is_undirected, contains_self_loops, from_scipy_sparse_matrix
+from torch_geometric.utils import is_undirected, contains_self_loops, from_scipy_sparse_matrix, to_scipy_sparse_matrix
 from vtk.util.numpy_support import vtk_to_numpy
 
 import setup
@@ -167,7 +167,6 @@ def pygsp_to_data(original: Data, G: pygsp.graphs.graph.Graph):
 
 
 if __name__ == '__main__':
-    from torch_geometric.utils import to_scipy_sparse_matrix
 
     path = setup.get_dataset_path('CoordToCnc')
 

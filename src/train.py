@@ -219,9 +219,7 @@ class GNN:
         y_true : np.array with labels
         """
         report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
-        metrics = report['1']
-        metrics['accuracy'] = report['accuracy']
-        return metrics
+        return report
 
     def get_losses(self, data: DataLoader) -> Tuple[torch.Tensor, List, torch.Tensor]:
         if self.physics:

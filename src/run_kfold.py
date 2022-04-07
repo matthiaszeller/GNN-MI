@@ -88,6 +88,8 @@ for i, (train_set, val_set) in enumerate(split_list):
         run=run
     )
 
+    preds = gnn.save_predictions(run)
+
     # run.save()
     run.finish()
 

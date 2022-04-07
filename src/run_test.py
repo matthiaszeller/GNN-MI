@@ -101,6 +101,8 @@ for i, (train_set, val_set) in enumerate(split_list):
     test_metrics = gnn.evaluate(val_set=False, run=run)
     logging.info(f'test metrics: {test_metrics}')
 
+    gnn.save_predictions(run)
+
     run.finish()
 
 logging.info('end of run_test.py')

@@ -1,4 +1,4 @@
-
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Any, Union, Tuple, List, OrderedDict
@@ -67,7 +67,7 @@ class GNN:
         self.model_type = config['model.type']
         self.model_save_path = model_save_path
         if self.model_save_path is None:
-            _, p = setup.get_data_paths()
+            _, p = setup.get_data_paths(path_out_only=True)
             self.model_save_path = p.joinpath('models')
 
         self.ratio = 1.0  # only useful for phys models
@@ -90,11 +90,11 @@ class GNN:
             self.physics = False
             self.automatic_update = False
             self.model = EGNNMastered(num_classes=train_set.num_classes,
-                              num_hidden_dim=config['num_hidden_dim'],
-                              num_graph_features=config['dataset.num_graph_features'],
-                              num_node_features=train_set.num_node_features,
-                              num_equiv=config['num_equiv'],
-                              num_gin=config['num_gin'])
+                                      num_hidden_dim=config['num_hidden_dim'],
+                                      num_graph_features=config['dataset.num_graph_features'],
+                                      num_node_features=train_set.num_node_features,
+                                      num_equiv=config['num_equiv'],
+                                      num_gin=config['num_gin'])
         elif self.model_type == 'GIN':
             self.physics = False
             self.automatic_update = False
@@ -170,6 +170,43 @@ class GNN:
         # Save file in wandb
         # run.save(file_path)
 
+    def save_predictions(self, run):
+        def data_loader_iterator(dataset: PatientDataset):
+            preds = []
+            loader = DataLoader(dataset, shuffle=False, batch_size=self.train_loader.batch_size)
+            with torch.no_grad():
+                for data in loader:
+                    pred = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+                    preds.append(pred.detach().cpu().numpy())
+
+            preds = np.concatenate(preds)
+            output = []
+            for i in range(len(dataset)):
+                sample = dataset.get(i)
+                output.append({
+                    'file': dataset.patients[i],
+                    'type': dataset.train,
+                    'g_x': sample.g_x.tolist(),
+                    'pred': preds[i].tolist(),
+                    'y': sample.y
+                })
+
+            return output
+
+        preds = []
+        self.model.eval()
+        preds.extend(data_loader_iterator(self.train_loader.dataset))
+        preds.extend(data_loader_iterator(self.val_loader.dataset))
+        if self.test_loader is not None:
+            preds.extend(data_loader_iterator(self.test_loader.dataset))
+
+        save_path = self.model_save_path.joinpath(f'pred-{run.id}.json')
+        logging.info(f'saving predictions in file {str(save_path)}')
+        with open(save_path, 'w') as f:
+            json.dump(preds, f, indent=4)
+
+        return preds
+
     @staticmethod
     def calculate_binary_classif_metrics(y_pred, y_true) -> Dict[str, float]:
         """
@@ -213,7 +250,7 @@ class GNN:
             for batch_idx, data in enumerate(self.train_loader):
                 # Small problem: if we're unlucky, the last batch may contain a single sample, batchnorm will fail and
                 #                raise an error. In this case, just ignore this last sample
-                #print(f'epoch {epoch_idx:<5} batch {batch_idx}')
+                # print(f'epoch {epoch_idx:<5} batch {batch_idx}')
                 # TODO find another workaround
                 if data.y.shape[0] == 1:
                     logging.error(f'skipping batch {batch_idx} of epoch {epoch_idx} containing a single sample '
@@ -312,8 +349,6 @@ class GNN:
                 ys_true.append(data.y.cpu().detach().numpy())
                 running_loss.append(loss.detach().cpu().item())
 
-
-
         val_loss = float(np.mean(running_loss))
         ys_true = np.concatenate(ys_true)
         ys_pred = np.concatenate(ys_pred)
@@ -328,3 +363,25 @@ class GNN:
             prefix: metrics
         })
         return metrics
+
+
+if __name__ == '__main__':
+    from datasets import split_data
+
+    with open(setup.get_project_root_path().joinpath('config/config-debug.json')) as f:
+        config = json.load(f)
+
+    test_set, ((train_set, val_set),) = split_data(path=setup.get_dataset_path(config['dataset.name']),
+                                                   num_node_features=config['dataset.num_node_features'],
+                                                   seed=config['cv.seed'],
+                                                   cv=False,
+                                                   valid_ratio=0.25,
+                                                   in_memory=config['dataset.in_memory'])
+
+    gnn = GNN(
+        config=config,
+        train_set=train_set,
+        valid_set=val_set,
+        test_set=test_set,
+    )
+

@@ -358,10 +358,16 @@ class GNN:
         run.log({
             # must use top-level metric for sweep logging, see wandb sweep documentation
             prefix + '_loss': val_loss,
-            prefix + '_f1_score': metrics['f1-score'],
+            prefix + '_f1_score': self.compute_f1_mean(metrics),
             prefix: metrics
         })
         return metrics
+
+    def compute_f1_mean(self, metrics):
+        # Harmonic mean of f1 scores for + and - classes
+        f1_1 = metrics['1']['f1-score']
+        f1_0 = metrics['0']['f1-score']
+        return 2 * (f1_1 * f1_0) / (f1_1 + f1_0)
 
 
 if __name__ == '__main__':

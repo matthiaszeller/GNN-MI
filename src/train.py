@@ -207,7 +207,7 @@ class GNN:
             json.dump(preds, f, indent=4)
 
         #wandb.save(str(save_path.absolute()))
-        run.save(str(save_path.absolute()), policy='end')
+        #run.save(str(save_path.absolute()), policy='end')
 
         return preds
 

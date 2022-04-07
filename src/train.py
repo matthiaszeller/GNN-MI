@@ -176,6 +176,7 @@ class GNN:
             loader = DataLoader(dataset, shuffle=False, batch_size=self.train_loader.batch_size)
             with torch.no_grad():
                 for data in loader:
+                    data = data.to(self.device)
                     pred = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
                     preds.append(pred.detach().cpu().numpy())
 

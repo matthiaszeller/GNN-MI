@@ -206,6 +206,8 @@ class GNN:
         with open(save_path, 'w') as f:
             json.dump(preds, f, indent=4)
 
+        wandb.save(str(save_path.absolute()))
+
         return preds
 
     @staticmethod
@@ -367,6 +369,9 @@ class GNN:
         # Harmonic mean of f1 scores for + and - classes
         f1_1 = metrics['1']['f1-score']
         f1_0 = metrics['0']['f1-score']
+        if f1_1 == 0.0 or f1_0 == 0.0:
+            return 0.0
+
         return 2 * (f1_1 * f1_0) / (f1_1 + f1_0)
 
 
@@ -389,4 +394,10 @@ if __name__ == '__main__':
         valid_set=val_set,
         test_set=test_set,
     )
+
+    run = wandb.init(**setup.WANDB_SETTINGS, job_type='trash', group='trash')
+    gnn.train(config['epochs'], early_stop=config['early_stop'], allow_stop=config['allow_stop'], run=run)
+    gnn.save_predictions(run)
+
+
 

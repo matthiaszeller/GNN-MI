@@ -61,6 +61,8 @@ val_metrics = gnn.train(
     run=run
 )
 
+gnn.save_predictions(run)
+
 # run.save()
 run.finish()
 

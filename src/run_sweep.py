@@ -1,7 +1,11 @@
 """
 Run coarse hyperparameter tuning with wandb sweep framework.
-Only use train/val split, i.e. no KFoldCV since coarse grid => many hyperparams.
 Use run_sweep_kfold.py for finer hyperparam tuning.
+
+PROPERTIES:
+    - train / validation / test splits, no kfold-cv
+    - wandb group is `model.name`
+    - wandb job type is "sweep"
 """
 import logging
 import sys
@@ -57,6 +61,8 @@ val_metrics = gnn.train(
     allow_stop=config['allow_stop'],
     run=run
 )
+
+gnn.save_predictions(run)
 
 # run.save()
 run.finish()

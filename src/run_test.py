@@ -51,10 +51,12 @@ else:
 
         configs.append(config)
 
+job_types = []
 for config in configs:
     # --- Generate job type
     random_id = ''.join(choices(string.ascii_lowercase + string.digits, k=6))
     job_type = f'test-{random_id}'
+    job_types.append(job_type)
 
     logging.info(f'job type is \n{job_type}\n\n')
     logging.info(f'running config: \n{utils.display_json_config(config)}')
@@ -109,4 +111,5 @@ for config in configs:
         run.finish()
 
 
+logging.info(f'summary of job types: {", ".join(job_types)}')
 logging.info('end of run_test.py')

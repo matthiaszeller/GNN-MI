@@ -158,7 +158,9 @@ def pygsp_to_data(original: Data, G: pygsp.graphs.graph.Graph):
     edge_index, edge_weight = from_scipy_sparse_matrix(G.A)
     data = original.clone()
     data.edge_index = edge_index
-    data.coord = torch.from_numpy(G.coords)
+    data.coord = torch.from_numpy(G.coords).type(torch.FloatTensor)
+    if data.coord.shape[0] != original.coord.shape[0]:
+        data.x = torch.empty(data.coord.shape[0], 0, dtype=torch.float)
 
     return data
 
@@ -172,4 +174,4 @@ if __name__ == '__main__':
 
     for file in path.glob('*.pt'):
         newdata = coarsen_graph(torch.load(file), r=0.7)
-
+        a=0

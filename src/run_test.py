@@ -41,10 +41,10 @@ else:
     for run_id in args.run_id:
         config = utils.get_run_config(run_id)
 
-        if 'cv.test_reps' not in config or \
-           not isinstance(config['cv.test_reps'], int):
-            logging.info('setting default value for cv.test_reps!')
-            config['cv.test_reps'] = setup.CONFIG_DEFAULT_TEST_REPS
+        if 'cv.k_fold' not in config or \
+           not isinstance(config['cv.k_fold'], int):
+            logging.info('setting default value for cv.k_fold!')
+            config['cv.k_fold'] = setup.CONFIG_DEFAULT_TEST_REPS
 
         desc = utils.display_json_config(config)
         logging.info(f'got config from run:\n{desc}')

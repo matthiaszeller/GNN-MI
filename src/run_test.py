@@ -44,7 +44,7 @@ else:
         if 'cv.k_fold' not in config or \
            not isinstance(config['cv.k_fold'], int):
             logging.info('setting default value for cv.k_fold!')
-            config['cv.k_fold'] = setup.CONFIG_DEFAULT_TEST_REPS
+            config['cv.k_fold'] = setup.CONFIG_DEFAULT_K_FOLD
 
         desc = utils.display_json_config(config)
         logging.info(f'got config from run:\n{desc}')

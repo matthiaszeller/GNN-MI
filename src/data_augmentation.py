@@ -1,7 +1,9 @@
 
 
 import logging
+from math import factorial
 from pathlib import Path
+from typing import Callable, Union
 
 import numpy as np
 import pygsp
@@ -16,7 +18,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 import setup
 
 
-def transition_matrix(A: scipy.sparse.spmatrix, type='randomwalk'):
+def transition_matrix(A: scipy.sparse.spmatrix, type='randomwalk') -> scipy.sparse.spmatrix:
     if type != 'randomwalk':
         raise ValueError
 
@@ -31,18 +33,22 @@ def transition_matrix(A: scipy.sparse.spmatrix, type='randomwalk'):
     return T
 
 
-def diffusion(T, param, n, type='pagerank'):
-    if type == 'pagerank':
+def diffusion_matrix(T: scipy.sparse.spmatrix, param: float, n: int, kernel='pagerank') -> scipy.sparse.spmatrix:
+    if kernel == 'pagerank':
         coef_k = lambda k: param * (1 - param) ** k
+    elif kernel == 'heat':
+        coef_k = lambda k: np.exp(-param) * param**k / factorial(k)
     else:
         raise ValueError
 
     # Matrix storing powers of T
     # First power is identity
     m = T.shape[0]
-    Tpowk = scipy.sparse.eye(m)
+    Tpowk = scipy.sparse.eye(m, format='csr')
     # S will collect weighted sum of powers
     S = Tpowk * coef_k(0)
+    # Convert T to csr format for efficient matrix-matrix mult
+    T = T.tocsr()
 
     for k in range(1, n+1):
         # Increase power
@@ -50,6 +56,36 @@ def diffusion(T, param, n, type='pagerank'):
         S += coef_k(k) * Tpowk
 
     return S
+
+
+@setup.arg_logger
+def create_diffusion_data(data: Data, threshold, param=0.1,
+                          kernel='pagerank', n=15, symmetrize: bool = True, self_loops: bool = False) -> Data:
+    out = data.clone()
+    # Adjacency matrix
+    A = to_scipy_sparse_matrix(out.edge_index)
+    # Get transition matrix
+    T = transition_matrix(A)
+    # Compute diffusion matrix
+    S = diffusion_matrix(T, param=param, n=n, kernel=kernel)
+    # Symmetrization
+    if symmetrize:
+        S = (S + S.T) / 2
+    # Efficient thresholding
+    S.data = np.where(S.data < threshold, 0.0, S.data)
+    S.eliminate_zeros()
+    # Remove self loops
+    if self_loops is False:
+        n = S.shape[0]
+        S[range(n), range(n)] = 0.0
+        S.eliminate_zeros()
+
+    # Build new sample
+    out.edge_index, out.edge_weight = from_scipy_sparse_matrix(S)
+    # Float64 -> float32
+    out.edge_weight = out.edge_weight.float()
+
+    return out
 
 
 def create_knn_data(coordinates, k_neighbours):
@@ -165,6 +201,44 @@ def pygsp_to_data(original: Data, G: pygsp.graphs.graph.Graph):
     return data
 
 
+@setup.arg_logger
+def augment_dataset(
+        fun_process_sample: Callable,
+        input_path: Union[str, Path],
+        output_path: Union[str, Path],
+        filename_suffix: str,
+        copy_original: bool = True,
+        *args,
+        **kwargs
+):
+    """
+    Generic function to augment a dataset.
+
+    :param fun_process_sample: data augmentation function, takes as input a torch geometric data sample, returns the
+    augmented version of the sample
+    :param copy_original: whether to include original samples in the new dataset
+    :param input_path: dataset input path, must exist
+    :param output_path: augmented dataset path, must not exist
+    :param args, kwargs: passed to fun_process_sample
+    """
+    input_path, output_path = Path(input_path), Path(output_path)
+    if not input_path.exists():
+        raise ValueError
+    if output_path.exists():
+        raise ValueError
+
+    for file in input_path.glob('*.pt'):
+        original = torch.load(file)
+        if copy_original:
+            outfile = output_path.joinpath(file.name)
+            torch.save(original, outfile)
+
+        # Get augmented sample
+        augmented = fun_process_sample(original, *args, **kwargs)
+        outfile = output_path.joinpath(f'{file.stem}_{filename_suffix}{file.suffix}')
+        logging.info(f'saving {outfile}')
+        torch.save(augmented, outfile)
+
 # <<<
 
 
@@ -173,5 +247,10 @@ if __name__ == '__main__':
     path = setup.get_dataset_path('CoordToCnc')
 
     for file in path.glob('*.pt'):
-        newdata = coarsen_graph(torch.load(file), r=0.7)
-        a=0
+        S = create_diffusion_data(torch.load(file), threshold=1e-2)
+        # Next line is for breakpoints
+        a=1
+
+    # for file in path.glob('*.pt'):
+    #     newdata = coarsen_graph(torch.load(file), r=0.7)
+    #     a=0

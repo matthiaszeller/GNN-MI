@@ -54,7 +54,7 @@ def parse_data_file_name(file):
     is_augmented = False
     for opt_part in optional:
         # TODO: this is not default deny => bad design
-        if any(pattern in opt_part.lower() for pattern in ('knn', 'noise', 'rot')):
+        if any(pattern in opt_part.lower() for pattern in ('knn', 'noise', 'rot', 'diffusion')):
             is_augmented = True
             break
 
@@ -156,7 +156,7 @@ def create_patient_dict(path, savepath):
 
 def load_patient_dict(path=None):
     if path is None:
-        _, path = setup.get_data_paths()
+        _, path = setup.get_data_paths(path_out_only=True)
 
     with open(path.joinpath('patient_dict.json'), 'rb') as f:
         patient_dict = json.load(f)

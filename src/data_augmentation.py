@@ -232,12 +232,13 @@ def augment_dataset(
         original = torch.load(file)
         if copy_original:
             outfile = output_path.joinpath(file.name)
+            logging.info(f'copy original file in {outfile}\n{original}')
             torch.save(original, outfile)
 
         # Get augmented sample
         augmented = fun_process_sample(original, *args, **kwargs)
         outfile = output_path.joinpath(f'{file.stem}_{filename_suffix}{file.suffix}')
-        logging.info(f'saving {outfile}')
+        logging.info(f'saving augmented data {outfile}\n{augmented}')
         torch.save(augmented, outfile)
 
 # <<<

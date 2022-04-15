@@ -3,11 +3,13 @@
 import logging
 import os
 import pickle
+from collections import Counter
 from typing import Union, List, Tuple
 
 import numpy as np
 import torch
 from sklearn.model_selection import train_test_split, KFold
+from torch.utils.data import WeightedRandomSampler
 from torch_geometric.data import Dataset as TorchDataset
 
 import setup
@@ -147,6 +149,15 @@ class PatientDataset(TorchDataset):
             # TODO chekc above comment about sanity check and num_node_features
             logging.warning('PatientDataset.in_memory set to False, this is highly inefficient')
 
+    def get_weighted_sampler(self):
+        counts = Counter([
+            data.y for data in self._data
+        ])
+        weights = 1 / np.array([counts[0], counts[1]], dtype=float)
+
+        samples_weight = np.array([weights[data.y] for data in self._data])
+        return WeightedRandomSampler(samples_weight, len(samples_weight))
+
     def standardize(self, mean: float = None, std: float = None):
         """
         Standardize the data, two modes:
@@ -204,9 +215,11 @@ class PatientDataset(TorchDataset):
             return self._data[idx]
         return self._load_from_disk(idx)
 
-    def _load_from_disk(self, idx: int):
-        #logging.debug(f'loading patient {self.patients[idx]}')
+    def _load_from_disk(self, idx: int, remove_edge_weight: bool = True):
         data = torch.load(os.path.join(self.path, self.patients[idx]))
+        if remove_edge_weight and 'edge_weight' in data.keys:
+            del data.edge_weight
+
         return data
 
     def get_patient(self, patient: str):
@@ -269,9 +282,20 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
 
 
 if __name__ == '__main__':
-    path_in, path_out = setup.get_data_paths()
-    path_dataset = path_out.joinpath('CoordToCnc_KNN5')
-    test_split, split_list = split_data(path_dataset, num_node_features=0, cv=True, k_cross=10)
+    from torch_geometric.loader import DataLoader
 
-    check_splits(test_split, split_list)
+    path_dataset = setup.get_dataset_path('CoordToCnc')
 
+    test_split, ((train, val), ) = split_data(path_dataset, num_node_features=0, seed=0, valid_ratio=0.2)
+
+    sampler = train.get_weighted_sampler()
+
+    #check_splits(test_split, split_list)
+
+    train_loader = DataLoader(train, batch_size=8, sampler=sampler)
+
+    ys = []
+    for _ in range(40):
+        for b in train_loader:
+            ys.append(b.y.float().mean())
+    ys = torch.stack(ys)

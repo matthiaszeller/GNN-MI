@@ -226,6 +226,7 @@ def augment_dataset(
         raise ValueError
     if output_path.exists():
         raise ValueError
+    output_path.mkdir()
 
     for file in input_path.glob('*.pt'):
         original = torch.load(file)

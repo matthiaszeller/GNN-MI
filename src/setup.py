@@ -74,7 +74,7 @@ def arg_logger(fun):
     @wraps(fun)
     def inner(*args, **kwargs):
         logging.debug(f'calling {fun.__name__} with args {args}, kwargs {kwargs}')
-        fun(*args, **kwargs)
+        return fun(*args, **kwargs)
 
     return inner
 

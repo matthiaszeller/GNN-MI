@@ -60,7 +60,7 @@ def diffusion_matrix(T: scipy.sparse.spmatrix, param: float, n: int, kernel='pag
 
 @setup.arg_logger
 def create_diffusion_data(data: Data, threshold, param=0.1,
-                          kernel='pagerank', n=15, symmetrize: bool = True, self_loops: bool = False) -> Data:
+                          kernel='heat', n=15, symmetrize: bool = True, self_loops: bool = False) -> Data:
     out = data.clone()
     # Adjacency matrix
     A = to_scipy_sparse_matrix(out.edge_index)
@@ -84,6 +84,43 @@ def create_diffusion_data(data: Data, threshold, param=0.1,
     out.edge_index, out.edge_weight = from_scipy_sparse_matrix(S)
     # Float64 -> float32
     out.edge_weight = out.edge_weight.float()
+
+    return out
+
+
+def create_random_diffusion(data: Data, n_connections: int = 3, diff_threshod: float = 5e-4, heat_param: float = 8.0):
+    """
+    Graph diffusion with randomization to add long-range connections.
+    First get a diffused graph with create_diffusion_data, with parameters that favor long-range connections.
+    Then for each node, randomly sample n_connections with prbability proportional to the weights obtained by diffusion.
+    """
+    def get_neigh(i, nnz_r, nnz_c):
+        mask = nnz_r == i
+        return nnz_c[mask]
+
+    out = data.clone()
+    # Diffusion data with "long range" connections
+    diff = create_diffusion_data(data, threshold=diff_threshod, param=heat_param, n=20, kernel='heat')
+    # Convenient data format
+    A = to_scipy_sparse_matrix(diff.edge_index)
+    nnz_r, nnz_c = A.nonzero()
+    # Randomly add new edges
+    new_connections = []
+    for i in range(A.shape[0]):
+        # Get neighbours of node i in diffusion data
+        neigh = get_neigh(i, nnz_r, nnz_c)
+        # Sampling probabilities
+        w = np.array(diff.edge_weight[neigh])
+        w /= w.sum()
+        chosen = np.random.choice(neigh, size=n_connections, p=w, replace=False)
+        new_connections.extend([
+            (i, u) for u in chosen
+        ])
+    # Format new edges
+    new_edges = torch.tensor(new_connections)
+    new_edges = torch.concat((new_edges, new_edges[:, [1, 0]])).T
+    # Add new edges
+    out.edge_index = torch.concat((out.edge_index, new_edges), dim=1)
 
     return out
 
@@ -208,6 +245,7 @@ def augment_dataset(
         output_path: Union[str, Path],
         filename_suffix: str,
         copy_original: bool = True,
+        n_sample: int = 1,
         *args,
         **kwargs
 ):
@@ -216,9 +254,11 @@ def augment_dataset(
 
     :param fun_process_sample: data augmentation function, takes as input a torch geometric data sample, returns the
     augmented version of the sample
-    :param copy_original: whether to include original samples in the new dataset
     :param input_path: dataset input path, must exist
     :param output_path: augmented dataset path, must not exist
+    :param filename_suffix: suffix of augmented-data files
+    :param copy_original: whether to include original samples in the new dataset
+    :param n_sample: how many times to call fun_process_sample, use > 1 only if randomized
     :param args, kwargs: passed to fun_process_sample
     """
     input_path, output_path = Path(input_path), Path(output_path)
@@ -228,6 +268,8 @@ def augment_dataset(
         raise ValueError
     output_path.mkdir()
 
+    number_suffix = (lambda i: f'_{i}') if n_sample > 1 else (lambda i: '')
+
     for file in input_path.glob('*.pt'):
         original = torch.load(file)
         if copy_original:
@@ -235,11 +277,13 @@ def augment_dataset(
             logging.info(f'copy original file in {outfile}\n{original}')
             torch.save(original, outfile)
 
-        # Get augmented sample
-        augmented = fun_process_sample(original, *args, **kwargs)
-        outfile = output_path.joinpath(f'{file.stem}_{filename_suffix}{file.suffix}')
-        logging.info(f'saving augmented data {outfile}\n{augmented}')
-        torch.save(augmented, outfile)
+        for i in range(n_sample):
+            # Get augmented sample
+            augmented = fun_process_sample(original, *args, **kwargs)
+            nsuffix = number_suffix(i)
+            outfile = output_path.joinpath(f'{file.stem}_{filename_suffix}{nsuffix}{file.suffix}')
+            logging.info(f'saving augmented data {outfile}\n{augmented}')
+            torch.save(augmented, outfile)
 
 # <<<
 
@@ -248,10 +292,20 @@ if __name__ == '__main__':
 
     path = setup.get_dataset_path('CoordToCnc')
 
-    for file in path.glob('*.pt'):
-        S = create_diffusion_data(torch.load(file), threshold=1e-2)
-        # Next line is for breakpoints
-        a=1
+    augment_dataset(
+        create_diffusion_data,
+        path,
+        path.parent.joinpath('CoordToCnc_diffusion'),
+        'diffusion',
+        kernel='heat',
+        threshold=0.1,
+        param=1.0
+    )
+    #
+    # for file in path.glob('*.pt'):
+    #     S = create_diffusion_data(torch.load(file), threshold=1e-2)
+    #     # Next line is for breakpoints
+    #     a=1
 
     # for file in path.glob('*.pt'):
     #     newdata = coarsen_graph(torch.load(file), r=0.7)

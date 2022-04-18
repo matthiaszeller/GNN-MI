@@ -200,7 +200,7 @@ class GNNBase(torch.nn.Module):
         pass
 
 
-class EGNN:
+class EGNN(torch.nn.Module):
     """
     Equivariant Graph Neural Network composed of:
         Sequential(<E_GCL layers>) -> Sequential(<GIN layer> -> elu -> ...)
@@ -216,6 +216,7 @@ class EGNN:
         @param num_equiv: number of E_GCL layers
         @param num_gin: number of gin layers
         """
+        super(EGNN, self).__init__()
         self.num_gin = num_gin
         self.num_equiv = num_equiv
         self.num_hidden_dim = num_hidden_dim

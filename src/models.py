@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch_geometric.nn as nn
 from torch import Tensor
 from torch.nn import Linear, ELU, ReLU, Dropout, BatchNorm1d, Sequential, Softmax
+from torch_scatter import scatter_max, scatter_mean
 
 import setup
 from egnn import E_GCL
@@ -26,7 +27,8 @@ def checkpoint_model(path, model_dict: OrderedDict, optimizer_dict: Dict, epoch:
 
 
 class GraphPooler(torch.nn.Module):
-    def __init__(self, input_dim: int, mean_pooler: bool = True, max_pooler: bool = True, max_norm_pooler: bool = True):
+    def __init__(self, input_dim: int, mean_pooler: bool = True, max_pooler: bool = True,
+                 min_pooler: bool = False, norm_pooler: bool = False):
         super(GraphPooler, self).__init__()
         self.pooling_ops = []
 
@@ -37,8 +39,23 @@ class GraphPooler(torch.nn.Module):
         if max_pooler:
             self.pooling_ops.append(nn.global_max_pool)
             self.output_dim += input_dim
-        if max_norm_pooler:
-            pass # TODO
+        if min_pooler:
+            self.pooling_ops.append(lambda x, b: nn.global_max_pool(-x, b))
+            self.output_dim += input_dim
+        if norm_pooler:
+            def norm_pool(x: torch.Tensor, batch: torch.Tensor):
+                n = self.compute_norms(x)
+                out = torch.tensor([
+                    scatter_mean(n, batch),
+                    scatter_max(n, batch)
+                ])
+                return out
+
+            self.pooling_ops.append(norm_pool)
+            self.output_dim += 2
+
+    def compute_norms(self, x: torch.Tensor):
+        return x.norm(dim=1)
 
     def forward(self, x: torch.Tensor, batch: torch.Tensor):
         out = torch.concat([
@@ -183,7 +200,7 @@ class GNNBase(torch.nn.Module):
         pass
 
 
-class EGNN(GNNBase):
+class EGNN:
     """
     Equivariant Graph Neural Network composed of:
         Sequential(<E_GCL layers>) -> Sequential(<GIN layer> -> elu -> ...)
@@ -191,18 +208,14 @@ class EGNN(GNNBase):
     """
 
     def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int,
-                 num_node_features: int = 0, num_equiv: int = 2, num_gin: int = 2):
+                 num_node_features: int = 0, num_equiv: int = 2, num_gin: int = 2,
+                 min_pooler: bool = False, norm_pooler: bool = False):
         """
         @param num_classes: see BaseGNN
         @param num_node_features: number of features per node
         @param num_equiv: number of E_GCL layers
         @param num_gin: number of gin layers
         """
-        super().__init__(num_classes=num_classes,
-                         num_hidden_dim=num_hidden_dim,
-                         num_graph_features=num_graph_features,
-                         num_pooling_ops=2)
-
         self.num_gin = num_gin
         self.num_equiv = num_equiv
         self.num_hidden_dim = num_hidden_dim
@@ -235,6 +248,17 @@ class EGNN(GNNBase):
                 for _ in range(num_gin)
             ])
 
+        self.pooler = GraphPooler(self.num_hidden_dim, min_pooler=min_pooler, norm_pooler=norm_pooler)
+        self.classifier = Sequential(
+            Linear(self.pooler.output_dim + num_graph_features, self.num_hidden_dim),
+            ELU(alpha=0.1),
+            Dropout(p=0.1),
+            Linear(self.num_hidden_dim, self.num_hidden_dim),
+            ELU(alpha=0.1),
+            Linear(self.num_hidden_dim, num_classes),
+            Softmax(dim=1)
+        )
+
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
         h, _, coord = self.equiv(h0, edge_index, coord0)
@@ -243,10 +267,10 @@ class EGNN(GNNBase):
             h, _ = self.gin_layers(h, edge_index)
 
         # Graph pooling operations
-        x1 = self.gmp(h, batch)
-        x2 = self.gap(h, batch)
+        p = self.pooler(h, batch)
 
-        x = torch.cat((x1, x2, g0), dim=1)  # TODO: Change this into a one-hot-encoding
+        # Build classifier input: concatenated pooled vectors + graph features
+        x = torch.cat((p, g0), dim=1)
         x = self.classifier(x)
         return x
 
@@ -405,8 +429,7 @@ if __name__ == '__main__':
     }
 
     # --- Pass sample of CoordToCnc dataset through model
-    sample = torch.load(path.joinpath('sample_coordtocnc.pt'))
-    sample.g_x = sample.g_x.reshape(1, -1)
+    sample = torch.load(path.joinpath('sample_coarse.pt'))
     sample2 = sample.clone()
     sample2.coord += torch.randn_like(sample2.coord) * 0.001
     sample2.y = 0
@@ -415,9 +438,9 @@ if __name__ == '__main__':
     sample3.coord += torch.randn_like(sample2.coord) * 0.001
     sample3.g_x[0, 2] = -1.0
     params_EGNN['num_node_features'] = sample.x.shape[1]
-    #model = EGNN(**params_EGNN)
+    model = EGNN(**params_EGNN)
     #model = GIN_GNN(**params_EGNN)
-    model = EGNNMastered(**params_EGNN)
+    #model = EGNNMastered(**params_EGNN)
     print(model)
     print(get_model_num_params(model), 'parameters')
     model.eval()

@@ -90,7 +90,7 @@ for config in configs:
             config=config,
             train_set=train_set,
             valid_set=val_set,
-            test_set=deepcopy(test_set), # Must copy, because test set must be standardized w.r.t. each fold independently
+            test_set=test_set,
             standardize=True
         )
 

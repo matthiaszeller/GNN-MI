@@ -128,7 +128,6 @@ class GNN:
 
         weights = torch.tensor([1 - config['loss.weight'], config['loss.weight']])  # for class imbalance
 
-        # TODO: check consistency with last layer of classifier. (Seems to apply softmax twice.)
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
         self.epoch = None
 
@@ -145,7 +144,7 @@ class GNN:
         # Apply standardization based on training values
         self.val_loader.dataset.standardize(train_mean, train_std)
         if self.test_loader is not None:
-            self.test_loader.dataset.standardize(train_mean, train_std)
+            self.test_loader.dataset.standardize(train_mean, train_std, restore=True)
 
     def save_model(self, state_dic: OrderedDict, optimizer_dic: Dict, epoch: int,
                    validation_metrics: Dict, run: wandb.sdk.wandb_run.Run):
@@ -382,23 +381,24 @@ if __name__ == '__main__':
     with open(setup.get_project_root_path().joinpath('config/config-debug.json')) as f:
         config = json.load(f)
 
-    test_set, ((train_set, val_set),) = split_data(path=setup.get_dataset_path(config['dataset.name']),
+    test_set, (split_list) = split_data(path=setup.get_dataset_path(config['dataset.name']),
                                                    num_node_features=config['dataset.num_node_features'],
                                                    seed=config['cv.seed'],
-                                                   cv=False,
-                                                   valid_ratio=0.25,
+                                                   cv=True,
+                                                    k_cross=5,
                                                    in_memory=config['dataset.in_memory'])
+    for train_set, val_set in split_list:
+        gnn = GNN(
+            config=config,
+            train_set=train_set,
+            valid_set=val_set,
+            test_set=test_set,
+        )
+        a=0
 
-    gnn = GNN(
-        config=config,
-        train_set=train_set,
-        valid_set=val_set,
-        test_set=test_set,
-    )
-
-    run = wandb.init(**setup.WANDB_SETTINGS, job_type='trash', group='trash')
-    gnn.train(config['epochs'], early_stop=config['early_stop'], allow_stop=config['allow_stop'], run=run)
-    gnn.save_predictions(run)
+    #run = wandb.init(**setup.WANDB_SETTINGS, job_type='trash', group='trash')
+    #gnn.train(config['epochs'], early_stop=config['early_stop'], allow_stop=config['allow_stop'], run=run)
+    #gnn.save_predictions(run)
 
 
 

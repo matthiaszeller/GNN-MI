@@ -131,6 +131,7 @@ class PatientDataset(TorchDataset):
         self.num_classes = 2  # Culprit, non-culprit
         self._num_node_features = num_node_features # 0 for CoordToCnc, 3 for CoordToCnc
         self.length = len(self.patients)
+        self._std_data = None
 
         self.in_memory = in_memory
         if self.in_memory:
@@ -158,7 +159,7 @@ class PatientDataset(TorchDataset):
         samples_weight = np.array([weights[data.y] for data in self._data])
         return WeightedRandomSampler(samples_weight, len(samples_weight))
 
-    def standardize(self, mean: float = None, std: float = None):
+    def standardize(self, mean: float = None, std: float = None, restore: bool = False):
         """
         Standardize the data, two modes:
         - mean and std is given, use those to standardize (typically for val/test sets)
@@ -166,6 +167,15 @@ class PatientDataset(TorchDataset):
         """
         if (mean is None) != (std is None):
             raise ValueError
+
+        # Check if data was already standardized:
+        if self._std_data is not None:
+            if restore is False:
+                raise ValueError('data already standardized, use restore=True if want to standardize again')
+            logging.info('restoring original data before standardizing again')
+            old_mean, old_std = self._std_data
+            for sample in self._data:
+                sample.x = sample.x * old_std + old_mean
 
         return_stats = False
         if mean is None:
@@ -179,6 +189,9 @@ class PatientDataset(TorchDataset):
         # Apply
         for sample in self._data:
             sample.x = (sample.x - mean) / std
+
+        # Book-keeping
+        self._std_data = (mean, std)
 
         if return_stats:
             return mean, std

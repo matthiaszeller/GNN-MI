@@ -253,9 +253,10 @@ class EGNN(torch.nn.Module):
         self.classifier = Sequential(
             Linear(self.pooler.output_dim + num_graph_features, self.num_hidden_dim),
             ELU(alpha=0.1),
-            Dropout(p=0.1),
-            Linear(self.num_hidden_dim, self.num_hidden_dim),
-            ELU(alpha=0.1),
+            BatchNorm1d(self.num_hidden_dim),
+            # Dropout(p=0.1),
+            # Linear(self.num_hidden_dim, self.num_hidden_dim),
+            # ELU(alpha=0.1),
             Linear(self.num_hidden_dim, num_classes),
             Softmax(dim=1)
         )

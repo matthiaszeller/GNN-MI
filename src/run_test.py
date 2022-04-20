@@ -77,7 +77,8 @@ for config in configs:
                          group=f"model-{config['model.name']}",
                          job_type=job_type,
                          name=f'fold-{i + 1}',
-                         config=config)
+                         config=config,
+                         tags=[job_type])
 
         logging.info(f'Test model fold {i+1}/{config["cv.k_fold"]}')
         logging.info(f'training set, length {len(train_set)}, {train_set.patients}')

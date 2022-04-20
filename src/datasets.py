@@ -126,6 +126,19 @@ class PatientDataset(TorchDataset):
             if patient_id in patients:
                 self.patients.append(name)  # name is name of file
 
+        if len(self.patients) == 0:
+            # Happens if val/test set and dataset contains only augmented data
+            if train == 'train':
+                raise ValueError('unexpected state')
+
+            logging.warning(f'dataset contains only augmented data, they will be included in the {train} set')
+            for name in os.listdir(self.path):
+                is_patient, patient_id, is_augmented = parse_data_file_name(name)
+                if is_patient is False:
+                    continue
+                if patient_id in patients:
+                    self.patients.append(name)
+                
         self.train = train
         self.patients = sorted(self.patients)  # TODO: necessary?
         self.num_classes = 2  # Culprit, non-culprit

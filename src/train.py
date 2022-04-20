@@ -6,7 +6,7 @@ from typing import Dict, Any, Union, Tuple, List, OrderedDict
 import numpy as np
 import torch
 import wandb
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, roc_auc_score
 from torch_geometric.loader import DataLoader
 
 import setup
@@ -211,7 +211,7 @@ class GNN:
         return preds
 
     @staticmethod
-    def calculate_binary_classif_metrics(y_pred, y_true) -> Dict[str, float]:
+    def calculate_binary_classif_metrics(y_pred, y_true, y_score) -> Dict[str, float]:
         """
         Calculates several metrics to evaluate model.
 
@@ -221,6 +221,8 @@ class GNN:
         y_true : np.array with labels
         """
         report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+        report['1']['auc'] = roc_auc_score(y_true, y_score[:, 1])
+        report['0']['auc'] = roc_auc_score(y_true, y_score[:, 0])
         return report
 
     def get_losses(self, data: DataLoader) -> Tuple[torch.Tensor, List, torch.Tensor]:
@@ -246,7 +248,7 @@ class GNN:
                 logging.info(f'epoch {epoch_idx} / {epochs}')
 
             running_loss = []
-            ys_pred, ys_true = [], []
+            ys_pred, ys_true, ys_score = [], [], []
             # --- Training loop over batches
             for batch_idx, data in enumerate(self.train_loader):
                 # Small problem: if we're unlucky, the last batch may contain a single sample, batchnorm will fail and
@@ -268,6 +270,7 @@ class GNN:
                 # Optimization step
                 self.optimizer.step()
 
+                ys_score.append(y_pred.detach().cpu().numpy())
                 pred = y_pred.argmax(dim=1)
                 ys_pred.append(pred.detach().cpu().numpy())
                 ys_true.append(data.y.detach().cpu().numpy())
@@ -275,9 +278,10 @@ class GNN:
 
             # --- Compute metrics
             train_loss = float(np.mean(running_loss))
+            ys_score = np.concatenate(ys_score)
             ys_true = np.concatenate(ys_true)
             ys_pred = np.concatenate(ys_pred)
-            metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true)
+            metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true, ys_score)
             metrics['loss'] = train_loss
             metrics['epoch'] = epoch_idx
 
@@ -337,13 +341,15 @@ class GNN:
             prefix = 'test'
 
         running_loss = []
-        ys_pred, ys_true = [], []
+        ys_pred, ys_true, ys_score = [], [], []
         self.model.eval()
         with torch.no_grad():
             pred_buffer = []
             for data in dataloader:
                 data = data.to(self.device)
                 loss, aux_loss, y_pred = self.get_losses(data)
+
+                ys_score.append(y_pred.cpu().detach().numpy())
                 pred = y_pred.argmax(dim=1)
                 pred_buffer.append(pred.cpu().detach().numpy())
                 ys_pred.append(pred.cpu().detach().numpy())
@@ -351,9 +357,10 @@ class GNN:
                 running_loss.append(loss.detach().cpu().item())
 
         val_loss = float(np.mean(running_loss))
+        ys_score = np.concatenate(ys_score)
         ys_true = np.concatenate(ys_true)
         ys_pred = np.concatenate(ys_pred)
-        metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true)
+        metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true, ys_score)
         metrics['loss'] = val_loss
         metrics['epoch'] = self.epoch
 
@@ -381,20 +388,23 @@ if __name__ == '__main__':
     with open(setup.get_project_root_path().joinpath('config/config-debug.json')) as f:
         config = json.load(f)
 
-    test_set, (split_list) = split_data(path=setup.get_dataset_path(config['dataset.name']),
+    test_set, ((train_set, val_set),) = split_data(path=setup.get_dataset_path(config['dataset.name']),
                                                    num_node_features=config['dataset.num_node_features'],
                                                    seed=config['cv.seed'],
-                                                   cv=True,
-                                                    k_cross=5,
+                                                   cv=False,
+                                                    valid_ratio=0.2,
                                                    in_memory=config['dataset.in_memory'])
-    for train_set, val_set in split_list:
-        gnn = GNN(
-            config=config,
-            train_set=train_set,
-            valid_set=val_set,
-            test_set=test_set,
-        )
-        a=0
+
+    run = wandb.init(**setup.WANDB_SETTINGS, group='trash', job_type='trash')
+    gnn = GNN(
+        config=config,
+        train_set=train_set,
+        valid_set=val_set,
+        test_set=test_set,
+    )
+    metrics = gnn.train(2, 1000, 1000, run=run)
+    mtest = gnn.evaluate(False, run)
+    a=0 # for breakpoint
 
     #run = wandb.init(**setup.WANDB_SETTINGS, job_type='trash', group='trash')
     #gnn.train(config['epochs'], early_stop=config['early_stop'], allow_stop=config['allow_stop'], run=run)

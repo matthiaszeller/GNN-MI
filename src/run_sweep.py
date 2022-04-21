@@ -40,7 +40,9 @@ _, ((train_set, val_set),) = split_data(path=setup.get_dataset_path(config['data
                                         seed=config['cv.seed'],
                                         valid_ratio=config['cv.valid_ratio'],
                                         cv=False,
-                                        in_memory=config['dataset.in_memory'])
+                                        # Args for PatientDataset
+                                        in_memory=config['dataset.in_memory'],
+                                        exclude_files=config.get('dataset.exclude_files'))
 
 logging.info(f'training set, length {len(train_set)}, {train_set.patients}')
 logging.info(f'validation set, length {len(val_set)}, {val_set.patients}')

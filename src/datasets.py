@@ -4,6 +4,7 @@ import logging
 import os
 import pickle
 from collections import Counter
+from pathlib import Path
 from typing import Union, List, Tuple
 
 import numpy as np
@@ -34,7 +35,6 @@ def split_data(path, num_node_features, seed, cv=False, k_cross=10, valid_ratio=
            test split across experiments
     kwargs: passed to PatientDataset
     """
-    # TODO: be convinced that this choice is the right one
     # (this ensures/facilitates that we don'T train on
     # augmented data from valid/test set.)
     patient_dict = load_patient_dict()
@@ -93,7 +93,7 @@ def split_data(path, num_node_features, seed, cv=False, k_cross=10, valid_ratio=
 
 
 class PatientDataset(TorchDataset):
-    def __init__(self, path, patients, train='train', num_node_features=3, in_memory=True):
+    def __init__(self, path, patients, train='train', num_node_features=3, in_memory=True, exclude_files: List[str] = None):
         """
         Creates a PatientDataset child object which works with Dataloaders
         for batching.
@@ -108,10 +108,13 @@ class PatientDataset(TorchDataset):
                 PatientDataset (they are included only for training)
         num_node_features : int, number of features per node.
         in_memory: bool, whether to load all the dataset into memory, otherwise load whenever needed
+        exclude_files: list of file names to exclude from the dataset
         """
         super(PatientDataset, self).__init__()
         self.path = path
         self.patients = []
+
+        patients = set(patients)
         for name in os.listdir(self.path):
             is_patient, patient_id, is_augmented = parse_data_file_name(name)
             if is_patient is False:
@@ -138,6 +141,16 @@ class PatientDataset(TorchDataset):
                     continue
                 if patient_id in patients:
                     self.patients.append(name)
+
+        # Exclude
+        if exclude_files is not None:
+            current_files = [Path(f).stem for f in self.patients]
+            exclude_files = [Path(f).stem for f in exclude_files]
+            to_remove = set(current_files).intersection(exclude_files)
+            if len(to_remove) > 0:
+                current_files = set(current_files).difference(to_remove)
+                self.patients = [f'{f}.pt' for f in current_files]
+                logging.info(f'removed following files from {train} set: {list(to_remove)}')
                 
         self.train = train
         self.patients = sorted(self.patients)  # TODO: necessary?
@@ -312,7 +325,8 @@ if __name__ == '__main__':
 
     path_dataset = setup.get_dataset_path('CoordToCnc')
 
-    test_split, ((train, val), ) = split_data(path_dataset, num_node_features=0, seed=0, valid_ratio=0.2)
+    test_split, ((train, val), ) = split_data(path_dataset, num_node_features=0, seed=0, valid_ratio=0.2,
+                                              exclude_files=['OLV046_LCX'])
 
     sampler = train.get_weighted_sampler()
 

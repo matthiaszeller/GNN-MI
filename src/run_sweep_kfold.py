@@ -36,7 +36,11 @@ test_set, split_list = split_data(path=setup.get_dataset_path(config['dataset.na
                                   seed=config['cv.seed'],
                                   cv=True,
                                   k_cross=config['cv.k_fold'],
-                                  in_memory=config['dataset.in_memory'])
+                                  # Args for PatientDataset
+                                  in_memory=config['dataset.in_memory'],
+                                  exclude_files=config.get('dataset.exclude_files'))
+
+
 # Select the fold specified by wandb agent
 train_set, val_set = split_list[config['cv.fold_id']]
 

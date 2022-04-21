@@ -158,6 +158,7 @@ class PatientDataset(TorchDataset):
         self._num_node_features = num_node_features # 0 for CoordToCnc, 3 for CoordToCnc
         self.length = len(self.patients)
         self._std_data = None
+        self._norm_data = []
 
         self.in_memory = in_memory
         if self.in_memory:
@@ -185,11 +186,23 @@ class PatientDataset(TorchDataset):
         samples_weight = np.array([weights[data.y] for data in self._data])
         return WeightedRandomSampler(samples_weight, len(samples_weight))
 
+    def normalize(self):
+        """Sample-wise normalization, i.e. for each sample, perform min-max normalization across all features"""
+        for sample in self._data:
+            if sample.x.numel() == 0:
+                continue
+
+            min_ = sample.x.min()
+            max_ = sample.x.max()
+            sample.x = (sample.x - min_) / (max_ - min_)
+            self._norm_data.append((min_, max_))
+
     def standardize(self, mean: float = None, std: float = None, restore: bool = False):
         """
         Standardize the data, two modes:
         - mean and std is given, use those to standardize (typically for val/test sets)
-        - no input is given, standardize with `self` values and return mean, std (typically done for train set)
+        - no input is given, standardize with `self` values and return mean, std (typically done for train set),
+          in this case, statistics are computed on concatenated node features of all nodes from all graphs
         """
         if (mean is None) != (std is None):
             raise ValueError

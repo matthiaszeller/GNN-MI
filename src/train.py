@@ -46,8 +46,7 @@ class GNN:
             train_set: PatientDataset,
             valid_set: PatientDataset,
             test_set: Union[PatientDataset, None] = None,
-            model_save_path: Union[str, Path] = None,
-            standardize: bool = True
+            model_save_path: Union[str, Path] = None
     ):
         """
         :param config:
@@ -55,8 +54,6 @@ class GNN:
         :param valid_set:
         :param test_set:
         :param model_save_path:
-        :param standardize: should always be true, except if you're in test mode and do several runs with
-        different initializations
         """
         dev = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(dev)
@@ -131,8 +128,24 @@ class GNN:
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
         self.epoch = None
 
-        if standardize:
-            self.standardize_node_features()
+        std = config.get('dataset.standardize')
+        if std is not None:
+            if std == 'standardize':
+                self.standardize_node_features()
+            elif std == 'normalize':
+                self.normalize_node_features()
+            else:
+                raise ValueError
+        else:
+            if train_set.num_node_features > 0:
+                logging.warning('node feature are not normalized')
+
+    def normalize_node_features(self):
+        self.train_loader.dataset.normalize()
+        self.val_loader.dataset.normalize()
+        if self.test_loader is not None:
+            self.test_loader.dataset.normalize()
+        logging.info('normalized node features')
 
     def standardize_node_features(self):
         if self.train_loader.dataset.num_node_features == 0:
@@ -393,15 +406,22 @@ if __name__ == '__main__':
                                                    seed=config['cv.seed'],
                                                    cv=False,
                                                     valid_ratio=0.2,
-                                                   in_memory=config['dataset.in_memory'])
+                                                   in_memory=config['dataset.in_memory'],
+                                                   exclude_files=['CHUV03_LAD', 'OLV036_LAD'])
 
-    run = wandb.init(**setup.WANDB_SETTINGS, group='trash', job_type='trash')
     gnn = GNN(
         config=config,
         train_set=train_set,
         valid_set=val_set,
         test_set=test_set,
     )
+
+    # Check data std
+    def get_stats(dset: PatientDataset):
+        data = torch.concat([e.x for e in dset._data])
+        return data.mean(dim=0), data.std(dim=0)
+
+    run = wandb.init(**setup.WANDB_SETTINGS, group='trash', job_type='trash')
     metrics = gnn.train(2, 1000, 1000, run=run)
     mtest = gnn.evaluate(False, run)
     a=0 # for breakpoint

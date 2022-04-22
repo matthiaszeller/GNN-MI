@@ -179,12 +179,13 @@ class PatientDataset(TorchDataset):
             # TODO chekc above comment about sanity check and num_node_features
             logging.warning('PatientDataset.in_memory set to False, this is highly inefficient')
 
-        self.transform_node_feat(node_feat_transform)
+        self._node_feat_transform = node_feat_transform
+        self.transform_node_feat()
 
-    def transform_node_feat(self, transform: str):
-        if transform is None:
+    def transform_node_feat(self):
+        if self._node_feat_transform is None:
             return
-        elif transform != 'fourier':
+        elif self._node_feat_transform != 'fourier':
             raise ValueError('only Fourier transform is supported')
 
         from utils import compute_fourier_coefs
@@ -296,7 +297,8 @@ class PatientDataset(TorchDataset):
         return self.get(idx)
 
     def __repr__(self):
-        return f'PatientDataset({len(self)}, type={self.train}, in_memory={self.in_memory})'
+        transfo = '' if self._node_feat_transform is None else f', transform={self._node_feat_transform}'
+        return f'PatientDataset({len(self)}, type={self.train}, in_memory={self.in_memory}{transfo})'
 
 
 def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDataset, PatientDataset]]):

@@ -68,7 +68,8 @@ for config in configs:
         seed=config['cv.seed'],
         cv=True,
         k_cross=config['cv.k_fold'],
-        in_memory=config['dataset.in_memory']
+        in_memory=config['dataset.in_memory'],
+        node_feat_transform=config.get('dataset.node_feat.transform')
     )
 
     for i, (train_set, val_set) in enumerate(split_list):

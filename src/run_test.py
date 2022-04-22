@@ -91,8 +91,7 @@ for config in configs:
             config=config,
             train_set=train_set,
             valid_set=val_set,
-            test_set=test_set,
-            standardize=True
+            test_set=test_set
         )
 
         # --- Train

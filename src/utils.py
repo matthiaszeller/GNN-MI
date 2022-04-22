@@ -7,12 +7,32 @@ from typing import List, Tuple, Dict, Any, Union
 import torch.nn
 import wandb
 import yaml
+from torch.fft import rfft
 
 import setup
 from datasets import PatientDataset
 
 
+def compute_fourier_coefs(node_feature: torch.Tensor) -> torch.Tensor:
+    """
+    Compute FFT of real signal. Output has same size as input.
+    Since the signal is real, coefficients are only computed for positive frequencies.
+    The complex FFT coefficients are decomposed into cosine coefs (ak) and sine coefs (bk), the output is:
+        [a0, a1, ..., an+1, b1, ..., bn]
+    """
+    ck = rfft(node_feature, dim=-1)
+    ak = torch.real(ck)
+    bk = torch.imag(ck)[:, 1:-1]
+    out = torch.concat((ak, bk), dim=-1)
+    return out
+
+
 def get_run_config(run_id: str) -> Dict[str, Any]:
+    """
+    Get a dictionnary of the wandb run configuration from the run id.
+    Conveniently re-orders the fields as they appear in one template configuration file (the first file matching the
+    following pattern: config/config_*.yaml)
+    """
     run = get_wandb_run(run_id)
     config = parse_json_config(run)
     return config

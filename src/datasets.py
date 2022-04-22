@@ -93,7 +93,8 @@ def split_data(path, num_node_features, seed, cv=False, k_cross=10, valid_ratio=
 
 
 class PatientDataset(TorchDataset):
-    def __init__(self, path, patients, train='train', num_node_features=3, in_memory=True, exclude_files: List[str] = None):
+    def __init__(self, path, patients, train='train', num_node_features=3, in_memory=True,
+                 exclude_files: List[str] = None, node_feat_transform: str = None):
         """
         Creates a PatientDataset child object which works with Dataloaders
         for batching.
@@ -109,6 +110,7 @@ class PatientDataset(TorchDataset):
         num_node_features : int, number of features per node.
         in_memory: bool, whether to load all the dataset into memory, otherwise load whenever needed
         exclude_files: list of file names to exclude from the dataset
+        node_feat_transform: None or "fourier"
         """
         super(PatientDataset, self).__init__()
         self.path = path
@@ -177,6 +179,19 @@ class PatientDataset(TorchDataset):
             # TODO chekc above comment about sanity check and num_node_features
             logging.warning('PatientDataset.in_memory set to False, this is highly inefficient')
 
+        self.transform_node_feat(node_feat_transform)
+
+    def transform_node_feat(self, transform: str):
+        if transform is None:
+            return
+        elif transform != 'fourier':
+            raise ValueError('only Fourier transform is supported')
+
+        from utils import compute_fourier_coefs
+        logging.info(f'transforming node features of {self.train} set with Fourier')
+        for e in self._data:
+            e.x = compute_fourier_coefs(e.x)
+
     def get_weighted_sampler(self):
         counts = Counter([
             data.y for data in self._data
@@ -188,6 +203,7 @@ class PatientDataset(TorchDataset):
 
     def normalize(self):
         """Sample-wise normalization, i.e. for each sample, perform min-max normalization across all features"""
+        logging.info(f'normalization of {self.train} set...')
         for sample in self._data:
             if sample.x.numel() == 0:
                 continue
@@ -226,6 +242,7 @@ class PatientDataset(TorchDataset):
             std = data.std(dim=0)
 
         # Apply
+        logging.info(f'standardization of {self.train} set...')
         for sample in self._data:
             sample.x = (sample.x - mean) / std
 
@@ -336,10 +353,11 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
 if __name__ == '__main__':
     from torch_geometric.loader import DataLoader
 
-    path_dataset = setup.get_dataset_path('CoordToCnc')
+    path_dataset = setup.get_dataset_path('WssToCnc')
 
-    test_split, ((train, val), ) = split_data(path_dataset, num_node_features=0, seed=0, valid_ratio=0.2,
-                                              exclude_files=['OLV046_LCX'])
+    test_split, ((train, val), ) = split_data(path_dataset, num_node_features=30, seed=0, valid_ratio=0.2,
+                                              exclude_files=['OLV046_LCX'],
+                                              node_feat_transform='fourier')
 
     sampler = train.get_weighted_sampler()
 

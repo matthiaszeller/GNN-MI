@@ -193,13 +193,30 @@ class PatientDataset(TorchDataset):
         for e in self._data:
             e.x = compute_fourier_coefs(e.x)
 
-    def get_weighted_sampler(self):
-        counts = Counter([
-            data.y for data in self._data
-        ])
-        weights = 1 / np.array([counts[0], counts[1]], dtype=float)
+    def get_weighted_sampler(self, criterion: str = 'artery'):
+        """
+        Get a weighted sampler. Criterion is arety or label.
+        """
+        if criterion == 'label':
+            counts = Counter([
+                data.y for data in self._data
+            ])
+            weights = 1 / np.array([counts[0], counts[1]], dtype=float)
+            samples_weight = np.array([weights[data.y] for data in self._data])
+        elif criterion == 'artery':
+            # Concatenate
+            g_xs = torch.concat([
+                data.g_x for data in self._data
+            ])
+            counts = g_xs.sum(dim=0)
+            weights = 1 / counts
+            samples_weight = torch.tensor([
+                weights[e.g_x.to(bool).ravel()] for e in self._data
+            ])
+        else:
+            raise ValueError
 
-        samples_weight = np.array([weights[data.y] for data in self._data])
+        logging.info(f'weights for {self.train} set: {weights}')
         return WeightedRandomSampler(samples_weight, len(samples_weight))
 
     def normalize(self):
@@ -361,14 +378,19 @@ if __name__ == '__main__':
                                               exclude_files=['OLV046_LCX'],
                                               node_feat_transform='fourier')
 
-    sampler = train.get_weighted_sampler()
-
     #check_splits(test_split, split_list)
 
+    sampler = train.get_weighted_sampler('artery')
     train_loader = DataLoader(train, batch_size=8, sampler=sampler)
-
-    ys = []
+    # Check empirically statistics with weighted sampler
+    ys, g_xs = [], []
     for _ in range(40):
         for b in train_loader:
-            ys.append(b.y.float().mean())
-    ys = torch.stack(ys)
+            ys.append(b.y)
+            g_xs.append(b.g_x)
+    ys = torch.concat(ys)
+    g_xs = torch.concat(g_xs)
+
+    mean_ys = ys.to(float).mean() # should be ~ 50% if get_weighted_sampler('label')
+    mean_gx = g_xs.mean(dim=0)    # should be ~ [1/3,1/3,1/3] if get_weighted_sampler('artery')
+    a = 1

@@ -115,6 +115,8 @@ class GNN:
         if sample is not None:
             logging.info(f'using sampler to balance {sample}')
             train_sampler = train_set.get_weighted_sampler(criterion=sample)
+        else:
+            train_sampler = None
 
         train_shuffle = True if train_sampler is None else None
         self.train_loader = DataLoader(train_set, config['batch_size'], shuffle=train_shuffle, sampler=train_sampler)

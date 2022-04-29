@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -164,6 +165,13 @@ def load_patient_dict(path=None):
     return patient_dict
 
 
+def describe_point_data(data) -> List[str]:
+    """Return the array names of the vtk data. For debugging purpose"""
+    n = data.GetPointData().GetNumberOfArrays()
+    names = [data.GetPointData().GetArrayName(i) for i in range(n)]
+    return names
+
+
 def create_mesh_data(surface, div=False, coord=False):
     """
         Creates data for the mesh where each node contains the 30 WSS
@@ -202,7 +210,7 @@ def create_graph_features(artery_type: str):
 
 
 @arg_logger
-def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
+def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write, path_wss_descriptors):
     """
     Create .pt files from .vtk files. Each .pt file is a serialized torch_geometric.data.Data object with attributes:
         x: node features, size n_nodes x n_features (n_features might be zero)
@@ -265,19 +273,24 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write):
             elif name == 'WssToCnc':
                 y = culprit
                 segment_data = create_mesh_data(surface, div=False, coord=False)
-            elif name == 'WssPlusCnc':
-                wss_mag = np.mean(create_mesh_data(surface,
-                                                   div=False,
-                                                   coord=False),
-                                  axis=1).reshape(-1, 1)
-                one_culprits = np.ones((num_nodes, 1)) * culprit
-                y = torch.from_numpy(
-                    np.concatenate((wss_mag, one_culprits), axis=1)
-                ).type(torch.FloatTensor)
-                segment_data = vtk_to_numpy(surface.GetPoints().GetData())
-            elif name == 'TsviPlusCnc':
-                segment_data = vtk_to_numpy(surface.GetPoints().GetData())
-                y = torch.tensor([culprit, tsvi], dtype=torch.float)
+            elif name == 'TsviToCnc':
+                y = culprit
+                # Extract node-level tsvi
+                segment_data = read_poly_data(path_wss_descriptors.joinpath(f'{pt_seg}_WSSdescriptors.vtp'))
+                segment_data = segment_data.GetPointData().GetArray('TSVI')
+            # elif name == 'WssPlusCnc':
+            #     wss_mag = np.mean(create_mesh_data(surface,
+            #                                        div=False,
+            #                                        coord=False),
+            #                       axis=1).reshape(-1, 1)
+            #     one_culprits = np.ones((num_nodes, 1)) * culprit
+            #     y = torch.from_numpy(
+            #         np.concatenate((wss_mag, one_culprits), axis=1)
+            #     ).type(torch.FloatTensor)
+            #     segment_data = vtk_to_numpy(surface.GetPoints().GetData())
+            # elif name == 'TsviPlusCnc':
+            #     segment_data = vtk_to_numpy(surface.GetPoints().GetData())
+            #     y = torch.tensor([culprit, tsvi], dtype=torch.float)
             else:
                 raise ValueError
 
@@ -336,7 +349,7 @@ if __name__ == '__main__':
         type=str,
         help='name of dataset to be created',
         default='WssToCnc',
-        choices=['CoordToCnc', 'WssToCnc', 'WssPlusCnc', 'TsviPlusCnc']
+        choices=['CoordToCnc', 'WssToCnc', 'TsviToCnc', 'WssToCnc&Tsvi']
     )
     parser.add_argument(
         '-k', '--augment_data',
@@ -358,12 +371,14 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
+    path_wss_descriptors = path_data_in.joinpath('CFD/WSSdescriptorsNew')
     create_data(
         name=args.dataset_name,
         rot_angles=[-18, -9, 9, 18],
         k_neigh=args.augment_data,
         path_input=args.data_source,
         path_label=args.labels_source,
-        path_write=path_data_out
+        path_write=path_data_out,
+        path_wss_descriptors=path_wss_descriptors
     )
 # options are ['CoordToCnc', 'WssToCnc', 'WssPlusCnc', 'TsviPlusCnc']

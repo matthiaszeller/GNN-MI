@@ -163,31 +163,35 @@ class GNNBase(torch.nn.Module):
     Baseline model, contains common blocks of EquivNoPys and NoPhysicsGnn
     """
 
-    def __init__(self, num_classes: int,
-                 num_hidden_dim: int,
-                 num_graph_features: int,
-                 num_pooling_ops: int,
-                 num_hidden_dim_classif: int = None):
+    def __init__(self, num_classes, num_hidden_dim, num_graph_features,
+                 num_node_features, num_equiv, num_gin):
         super().__init__()
 
-        self.gmp = nn.global_mean_pool
-        self.gap = nn.global_max_pool
+        self.num_classes = num_classes
+        self.num_graph_features = num_graph_features
+        self.num_hidden_dim = num_hidden_dim
+        self.num_node_features = num_node_features
+        self.num_gin = num_gin
+        self.num_equiv = num_equiv
 
-        self.equiv = None
-        self.gin_layers = []
-        self.num_pooling_ops = num_pooling_ops
-        if num_hidden_dim_classif is None:
-            num_hidden_dim_classif = num_hidden_dim
-
-        self.classifier = Sequential(
-            #Dropout(p=0.5),
-            Linear(self.num_pooling_ops * num_hidden_dim + num_graph_features, num_hidden_dim_classif),
-            ELU(alpha=0.1),
-            BatchNorm1d(num_hidden_dim_classif),
-            #Dropout(p=0.5),
-            Linear(num_hidden_dim_classif, num_classes),
-            Softmax(dim=1)
-        )
+        # self.gmp = nn.global_mean_pool
+        # self.gap = nn.global_max_pool
+        #
+        # self.equiv = None
+        # self.gin_layers = []
+        # self.num_pooling_ops = num_pooling_ops
+        # if num_hidden_dim_classif is None:
+        #     num_hidden_dim_classif = num_hidden_dim
+        #
+        # self.classifier = Sequential(
+        #     #Dropout(p=0.5),
+        #     Linear(self.num_pooling_ops * num_hidden_dim + num_graph_features, num_hidden_dim_classif),
+        #     ELU(alpha=0.1),
+        #     BatchNorm1d(num_hidden_dim_classif),
+        #     #Dropout(p=0.5),
+        #     Linear(num_hidden_dim_classif, num_classes),
+        #     Softmax(dim=1)
+        # )
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """
@@ -200,7 +204,27 @@ class GNNBase(torch.nn.Module):
         pass
 
 
-class EGNN(torch.nn.Module):
+class Classifier(torch.nn.Module):
+    def __init__(self, num_input_dim: int, num_hidden_dim: int, num_classes: int):
+        super(Classifier, self).__init__()
+
+        self.num_input_dim = num_input_dim
+        self.num_hidden_dim = num_hidden_dim
+        self.num_classes = num_classes
+
+        self.classifier = Sequential(
+            Linear(self.num_input_dim, self.num_hidden_dim),
+            ELU(alpha=0.1),
+            BatchNorm1d(self.num_hidden_dim),
+            Linear(self.num_hidden_dim, self.num_classes),
+            Softmax(dim=1)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.classifier(x)
+
+
+class EGNN(GNNBase):
     """
     Equivariant Graph Neural Network composed of:
         Sequential(<E_GCL layers>) -> Sequential(<GIN layer> -> elu -> ...)
@@ -216,11 +240,9 @@ class EGNN(torch.nn.Module):
         @param num_equiv: number of E_GCL layers
         @param num_gin: number of gin layers
         """
-        super(EGNN, self).__init__()
-        self.num_gin = num_gin
-        self.num_equiv = num_equiv
-        self.num_hidden_dim = num_hidden_dim
-        self.num_node_features = num_node_features
+        super(EGNN, self).__init__(num_classes, num_hidden_dim, num_graph_features,
+                                   num_node_features, num_equiv, num_gin)
+
         assert self.num_equiv > 0
 
         self.equiv = nn.Sequential('h, edge_index, coord',
@@ -243,30 +265,31 @@ class EGNN(torch.nn.Module):
         if self.num_gin > 0:
             self.gin_layers = nn.Sequential('x, edge_index', [
                 (
-                    GINActivatedModule(self.num_hidden_dim, self.num_hidden_dim, self.num_hidden_dim),
+                    # +1 because we provide norm of delta coordinates
+                    GINActivatedModule(self.num_hidden_dim + 1, self.num_hidden_dim, self.num_hidden_dim),
                     'x, edge_index -> x, edge_index'
                 )
                 for _ in range(num_gin)
             ])
 
         self.pooler = GraphPooler(self.num_hidden_dim, min_pooler=min_pooler, norm_pooler=norm_pooler)
-        self.classifier = Sequential(
-            Linear(self.pooler.output_dim + num_graph_features, self.num_hidden_dim),
-            ELU(alpha=0.1),
-            BatchNorm1d(self.num_hidden_dim),
-            # Dropout(p=0.1),
-            # Linear(self.num_hidden_dim, self.num_hidden_dim),
-            # ELU(alpha=0.1),
-            Linear(self.num_hidden_dim, num_classes),
-            Softmax(dim=1)
-        )
+        self.classifier = Classifier(self.pooler.output_dim + self.num_graph_features,
+                                     self.num_hidden_dim, self.num_classes)
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
+        # Coords will be modified in place by EGCLs, clone them for later usage
+        coord_original = coord0.clone()
+
+        # Equivariant layers
         h, _, coord = self.equiv(h0, edge_index, coord0)
 
+        # GIN layers
         if self.num_gin > 0:
-            h, _ = self.gin_layers(h, edge_index)
+            # Create feature: norm of coordinate changes
+            delta_coord = (coord - coord_original).norm(dim=-1).unsqueeze(dim=-1)
+            h_gin = torch.concat((h, delta_coord), dim=-1)
+            h, _ = self.gin_layers(h_gin, edge_index)
 
         # Graph pooling operations
         p = self.pooler(h, batch)
@@ -292,7 +315,7 @@ class EGNNMastered(GNNBase):
         @param num_equiv: number of E_GCL layers
         @param num_gin: number of gin layers
         """
-
+        # TODO: need to refactor this class to match new structure
         super().__init__(num_classes=num_classes,
                          num_hidden_dim=num_hidden_dim,
                          num_graph_features=num_graph_features,
@@ -371,10 +394,9 @@ class GIN_GNN(GNNBase):
         @param num_equiv: number of E_GCL layers
         @param num_gin: number of gin layers
         """
-        super().__init__(num_classes=num_classes,
-                         num_hidden_dim=num_hidden_dim,
-                         num_graph_features=num_graph_features,
-                         num_pooling_ops=2)
+        super().__init__(num_classes=num_classes, num_hidden_dim=num_hidden_dim,
+                         num_graph_features=num_graph_features, num_node_features=num_node_features,
+                         num_equiv=0, num_gin=num_gin)
 
         self.num_gin = num_gin
         self.num_hidden_dim = num_hidden_dim

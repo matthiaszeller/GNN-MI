@@ -278,6 +278,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write, p
                 # Extract node-level tsvi
                 segment_data = read_poly_data(path_wss_descriptors.joinpath(f'{pt_seg}_WSSdescriptors.vtp'))
                 segment_data = segment_data.GetPointData().GetArray('TSVI')
+                segment_data = vtk_to_numpy(segment_data)
             # elif name == 'WssPlusCnc':
             #     wss_mag = np.mean(create_mesh_data(surface,
             #                                        div=False,

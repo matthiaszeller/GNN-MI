@@ -169,8 +169,10 @@ class PatientDataset(TorchDataset):
                 self._load_from_disk(i) for i in range(self.length)
             ]
             # TODO if in_memory False, this sanity check isn't done anywhere else and error is really hard to debug
-            if self._data[0].x.shape[1] != self.num_node_features:
-                raise ValueError(f'data has shape {self._data[0].x.shape[1]} '
+            sample_feat = self._data[0].x
+            if (sample_feat.ndim > 1 and sample_feat.shape[-1] != self.num_node_features) \
+               or (sample_feat.ndim == 1 and self.num_node_features != 1):
+                raise ValueError(f'data has last dimension of size {sample_feat.shape[-1]} '
                                  f'but num feature is {self.num_node_features}')
         else:
             # Because of data standardization, just don't handle it in the end
@@ -307,6 +309,9 @@ class PatientDataset(TorchDataset):
         if remove_edge_weight and 'edge_weight' in data.keys:
             del data.edge_weight
 
+        if data.x.ndim == 1:
+            data.x = data.x.unsqueeze(-1)
+
         return data
 
     def get_patient(self, patient: str):
@@ -372,11 +377,11 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
 if __name__ == '__main__':
     from torch_geometric.loader import DataLoader
 
-    path_dataset = setup.get_dataset_path('WssToCnc')
+    path_dataset = setup.get_dataset_path('TsviToCnc')
 
-    test_split, ((train, val), ) = split_data(path_dataset, num_node_features=30, seed=0, valid_ratio=0.2,
+    test_split, ((train, val), ) = split_data(path_dataset, num_node_features=1, seed=0, valid_ratio=0.2,
                                               exclude_files=['OLV046_LCX'],
-                                              node_feat_transform='fourier')
+                                              )#node_feat_transform='fourier')
 
     #check_splits(test_split, split_list)
 

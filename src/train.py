@@ -29,13 +29,13 @@ class GNN:
     """
 
     # TODO: Add a model "EquivWSS" which is exactly like "Equiv", but
-    # which uses the WSS scalars as invariant features h. 
+    # which uses the WSS scalars as invariant features h.
 
     # TODO: Reimplement the models that includes Physics
     # (i.e. loss term at node level) from Yunshu's project
     # (https://github.com/yooyoo9/MI-detection), and combine that
     # to the Equivariant framework. Note that this is different than,
-    # EquivWSS, as the latter does not do any prediction at the node level. 
+    # EquivWSS, as the latter does not do any prediction at the node level.
     # Good luck! :)
 
     model: GNNBase
@@ -69,6 +69,12 @@ class GNN:
 
         self.ratio = 1.0  # only useful for phys models
 
+        self.auxiliary_task = config.get('model.aux_task', False)
+        if self.auxiliary_task:
+            self.aux_loss_weight = config['model.aux_loss_weight']
+        else:
+            self.aux_loss_weight = 0.0
+
         if self.model_type == 'NoPhysicsGnn':
             raise NotImplementedError
             self.physics = False
@@ -82,7 +88,8 @@ class GNN:
                               num_graph_features=config['dataset.num_graph_features'],
                               num_node_features=train_set.num_node_features,
                               num_equiv=config['num_equiv'],
-                              num_gin=config['num_gin'])
+                              num_gin=config['num_gin'],
+                              auxiliary_task=self.auxiliary_task)
         elif self.model_type == 'EquivMastered':
             self.physics = False
             self.automatic_update = False
@@ -134,8 +141,11 @@ class GNN:
         weights = torch.tensor([1 - config['loss.weight'], config['loss.weight']])  # for class imbalance
 
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
+        if self.auxiliary_task:
+            self.aux_criterion = torch.nn.MSELoss().to(self.device)
         self.epoch = None
 
+        # --- Data standardization
         std = config.get('dataset.standardize')
         if std is not None:
             if std == 'standardize':
@@ -246,14 +256,31 @@ class GNN:
         report['0']['auc'] = roc_auc_score(y_true, y_score[:, 0])
         return report
 
-    def get_losses(self, data: DataLoader) -> Tuple[torch.Tensor, List, torch.Tensor]:
+    def get_losses(self, data: DataLoader) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor,
+                                                    torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Returns:
+            - loss
+            - auxiliary loss for regress        (may be empty)
+            - yhat for classif
+            - yhat for regress                  (may be empty)
+            - true y for classif
+            - true y for regress                (may be empty)
+        """
         if self.physics:
             raise ValueError("!! Wrong argument: self.physics set to true. Not supported in this project.")
 
+        if self.auxiliary_task:
+            yhat, y_regr_hat = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+            y, y_regr = data.y[0], data.y[1:]
+            loss = self.criterion(yhat, data.y)
+            aux_loss = self.aux_criterion(y_regr_hat, y_regr)
+            return loss, aux_loss, yhat, y_regr_hat, y, y_regr
+
         yhat = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
         loss = self.criterion(yhat, data.y)
-        aux_loss = []
-        return loss, aux_loss, yhat
+        dummy_aux_loss = torch.tensor([0.0], requires_grad=True)
+        return loss, dummy_aux_loss, yhat, torch.empty((0, 0)), data.y, torch.empty((0, 0))
 
     def train(self, epochs: int, early_stop: int, allow_stop: int = 200,
               run: wandb.sdk.wandb_run.Run = wandb):
@@ -268,8 +295,9 @@ class GNN:
             if epoch_idx % 10 == 0:
                 logging.info(f'epoch {epoch_idx} / {epochs}')
 
-            running_loss = []
+            running_loss, running_loss_aux = [], []
             ys_pred, ys_true, ys_score = [], [], []
+            ys_pred_regression, ys_true_regression = [], []
             # --- Training loop over batches
             for batch_idx, data in enumerate(self.train_loader):
                 # Small problem: if we're unlucky, the last batch may contain a single sample, batchnorm will fail and
@@ -285,26 +313,35 @@ class GNN:
                 data = data.to(self.device)
                 self.optimizer.zero_grad()
                 # Predict
-                loss, aux_loss, y_pred = self.get_losses(data)
+                loss, aux_loss, y_pred, y_pred_regression, y, y_regression = self.get_losses(data)
                 # Backward propagation
-                loss.backward()
+                # if there's no auxiliary task, aux_loss is disconnected to the computational graph,
+                # i.e., it does not interferes with the main task
+                (loss + aux_loss * self.aux_loss_weight).backward()
                 # Optimization step
                 self.optimizer.step()
 
+                # Process classification output
                 ys_score.append(y_pred.detach().cpu().numpy())
                 pred = y_pred.argmax(dim=1)
                 ys_pred.append(pred.detach().cpu().numpy())
-                ys_true.append(data.y.detach().cpu().numpy())
+                ys_true.append(y.detach().cpu().numpy())
                 running_loss.append(loss.detach().cpu().item())
+                # Process regression output
+                running_loss_aux.append(aux_loss.detach().cpu().item())
+                ys_pred_regression.append(y_pred_regression.detach().cpu().numpy())
+                ys_true_regression.append(y_regression)
 
             # --- Compute metrics
             train_loss = float(np.mean(running_loss))
+            train_loss_aux = float(np.mean(running_loss_aux))
             ys_score = np.concatenate(ys_score)
             ys_true = np.concatenate(ys_true)
             ys_pred = np.concatenate(ys_pred)
             metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true, ys_score)
             metrics['loss'] = train_loss
             metrics['epoch'] = epoch_idx
+            metrics['aux'] = {'MSE': train_loss_aux}
 
             # --- WandB logging, don't commit i) for performance ii) to align train and eval logs
             run.log({'train': metrics}, commit=False)
@@ -361,29 +398,29 @@ class GNN:
             dataloader = self.test_loader
             prefix = 'test'
 
-        running_loss = []
+        running_loss, running_loss_aux = [], []
         ys_pred, ys_true, ys_score = [], [], []
         self.model.eval()
         with torch.no_grad():
-            pred_buffer = []
             for data in dataloader:
                 data = data.to(self.device)
-                loss, aux_loss, y_pred = self.get_losses(data)
-
+                loss, aux_loss, y_pred, y_pred_regression, y, y_regression = self.get_losses(data)
                 ys_score.append(y_pred.cpu().detach().numpy())
                 pred = y_pred.argmax(dim=1)
-                pred_buffer.append(pred.cpu().detach().numpy())
                 ys_pred.append(pred.cpu().detach().numpy())
-                ys_true.append(data.y.cpu().detach().numpy())
+                ys_true.append(y.cpu().detach().numpy())
                 running_loss.append(loss.detach().cpu().item())
+                running_loss_aux.append(aux_loss.detach().cpu().item())
 
         val_loss = float(np.mean(running_loss))
+        val_loss_aux = float(np.mean(running_loss_aux))
         ys_score = np.concatenate(ys_score)
         ys_true = np.concatenate(ys_true)
         ys_pred = np.concatenate(ys_pred)
         metrics = self.calculate_binary_classif_metrics(ys_pred, ys_true, ys_score)
         metrics['loss'] = val_loss
         metrics['epoch'] = self.epoch
+        metrics['aux'] = {'MSE': val_loss_aux}
 
         run.log({
             # must use top-level metric for sweep logging, see wandb sweep documentation
@@ -406,7 +443,9 @@ class GNN:
 if __name__ == '__main__':
     from datasets import split_data
 
-    with open(setup.get_project_root_path().joinpath('config/config-debug.json')) as f:
+    config_path = 'toolbox/config-4786gy4q.json'
+    #config_path = 'config/config-debug.json'
+    with open(setup.get_project_root_path().joinpath(config_path)) as f:
         config = json.load(f)
 
     test_set, ((train_set, val_set),) = split_data(path=setup.get_dataset_path(config['dataset.name']),

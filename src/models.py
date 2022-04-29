@@ -224,6 +224,22 @@ class Classifier(torch.nn.Module):
         return self.classifier(x)
 
 
+class Regressor(torch.nn.Module):
+    def __init__(self, num_input_dim: int, num_hidden_dim: int):
+        super(Regressor, self).__init__()
+        self.num_input_dim = num_input_dim
+        self.num_hidden_dim = num_hidden_dim
+        self.regressor = Sequential(
+            Linear(self.num_input_dim, self.num_hidden_dim),
+            ELU(alpha=0.1),
+            BatchNorm1d(self.num_hidden_dim),
+            Linear(self.num_hidden_dim, self.num_classes)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.regressor(x)
+
+
 class EGNN(GNNBase):
     """
     Equivariant Graph Neural Network composed of:
@@ -233,6 +249,7 @@ class EGNN(GNNBase):
 
     def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int,
                  num_node_features: int = 0, num_equiv: int = 2, num_gin: int = 2,
+                 auxiliary_task: bool = False,
                  min_pooler: bool = False, norm_pooler: bool = False):
         """
         @param num_classes: see BaseGNN
@@ -244,6 +261,7 @@ class EGNN(GNNBase):
                                    num_node_features, num_equiv, num_gin)
 
         assert self.num_equiv > 0
+        self.auxiliary_task = auxiliary_task
 
         self.equiv = nn.Sequential('h, edge_index, coord',
                                    [
@@ -275,6 +293,8 @@ class EGNN(GNNBase):
         self.pooler = GraphPooler(self.num_hidden_dim, min_pooler=min_pooler, norm_pooler=norm_pooler)
         self.classifier = Classifier(self.pooler.output_dim + self.num_graph_features,
                                      self.num_hidden_dim, self.num_classes)
+        if self.auxiliary_task:
+            self.regressor = Regressor(self.pooler.output_dim + self.num_graph_features, self.num_hidden_dim)
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
@@ -296,7 +316,11 @@ class EGNN(GNNBase):
 
         # Build classifier input: concatenated pooled vectors + graph features
         x = torch.cat((p, g0), dim=1)
-        x = self.classifier(x)
+
+        if self.auxiliary_task:
+            x = self.classifier(x), self.regressor(x)
+        else:
+            x = self.classifier(x)
         return x
 
 

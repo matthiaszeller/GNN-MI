@@ -1,0 +1,37 @@
+\begin{tikzpicture}
+	\begin{pgfonlayer}{nodelayer}
+		\node [style=basic rec] (0) at (-8.5, 7.75) {};
+		\node [style=basic rec] (1) at (-8.5, 7.75) {EGCL};
+		\node [style=basic rec] (2) at (-8.5, 5.25) {EGCL};
+		\node [style=small text] (3) at (-6.5, 6.5) {$\mathbf h^{(1)}, \; \mathbf c^{(1)}, \; \mathcal E_{\mathcal B}$};
+		\node [style=basic rec] (4) at (-8.5, 2.25) {EGCL};
+		\node [style=small text] (11) at (-8.5, 9.75) {$\mathbf h^{(0)}, \; \mathbf c^{(0)}, \; \mathcal E_{\mathcal B}$};
+		\node [style=none] (14) at (-8.5, 9) {};
+		\node [style=basic rec] (16) at (-10.25, -2.5) {Pooling};
+		\node [style=small text] (19) at (-10.25, -4.5) {$\mathbf z_{pool}$};
+		\node [style=small text] (20) at (-10.25, -0.25) {$\mathbf h^{(K+1)}$};
+		\node [style=small text] (21) at (-6, -0.25) {$\mathbf c^{(K+1)}, \; \mathcal E_{\mathcal B}$};
+		\node [style=none] (22) at (-8.5, 1) {};
+		\node [style=small text] (24) at (-4.5, -4.5) {};
+		\node [style=small text] (25) at (-4.5, -4.5) {$\mathbf z_{\mathcal G, \mathcal B}$};
+		\node [style=basic rec] (26) at (-7.25, -6.25) {};
+		\node [style=basic rec] (27) at (-7.25, -6.25) {Classifier};
+		\node [style=small dot] (28) at (-7.25, -4.5) {};
+		\node [style=small text] (29) at (-6.5, 3.75) {$\mathbf h^{(k)}, \; \mathbf c^{(k)}, \; \mathcal E_{\mathcal B}$};
+		\node [style=small text] (30) at (-6.75, -2.5) {$I_{\mathcal B}$};
+	\end{pgfonlayer}
+	\begin{pgfonlayer}{edgelayer}
+		\draw [style=simple arrow] (1) to (2);
+		\draw [style=simple arrow] (14.center) to (1);
+		\draw [style=simple dashed arrow] (2) to (4);
+		\draw [style=simple arrow] (16) to (19);
+		\draw (4) to (22.center);
+		\draw [style=simple arrow] (22.center) to (20);
+		\draw [style=simple arrow] (22.center) to (21);
+		\draw [style=simple arrow] (20) to (16);
+		\draw (19) to (28);
+		\draw (28) to (25);
+		\draw [style=simple arrow] (28) to (27);
+		\draw [style=simple arrow] (30) to (16);
+	\end{pgfonlayer}
+\end{tikzpicture}

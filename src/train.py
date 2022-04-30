@@ -202,24 +202,34 @@ class GNN:
 
     def save_predictions(self, run):
         def data_loader_iterator(dataset: PatientDataset):
-            preds = []
+            preds, preds_aux = [], []
             loader = DataLoader(dataset, shuffle=False, batch_size=self.train_loader.batch_size)
             with torch.no_grad():
                 for data in loader:
                     data = data.to(self.device)
                     pred = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
+                    if self.auxiliary_task:
+                        pred, pred_aux = pred
                     preds.append(pred.detach().cpu().numpy())
+                    preds_aux.append(pred_aux.detach().cpu().numpy())
 
             preds = np.concatenate(preds)
             output = []
             for i in range(len(dataset)):
                 sample = dataset.get(i)
+                y = sample.y
+                if self.auxiliary_task:
+                    y, y_aux = y[0], y[1:]
+                else:
+                    y_aux = np.nan
                 output.append({
                     'file': dataset.patients[i],
                     'type': dataset.train,
                     'g_x': sample.g_x.tolist(),
                     'pred': preds[i].tolist(),
-                    'y': sample.y
+                    'pred_aux': preds_aux[i].tolist() if self.auxiliary_task else np.nan,
+                    'y': y,
+                    'y_aux': y_aux
                 })
 
             return output

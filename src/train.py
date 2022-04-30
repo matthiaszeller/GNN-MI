@@ -214,6 +214,7 @@ class GNN:
                     preds_aux.append(pred_aux.detach().cpu().numpy())
 
             preds = np.concatenate(preds)
+            preds_aux = np.concatenate(preds_aux)
             output = []
             for i in range(len(dataset)):
                 sample = dataset.get(i)

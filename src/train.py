@@ -218,7 +218,7 @@ class GNN:
             output = []
             for i in range(len(dataset)):
                 sample = dataset.get(i)
-                y = sample.y
+                y = sample.y.squeeze()
                 if self.auxiliary_task:
                     y, y_aux = y[0], y[1:]
                 else:
@@ -228,9 +228,9 @@ class GNN:
                     'type': dataset.train,
                     'g_x': sample.g_x.tolist(),
                     'pred': preds[i].tolist(),
-                    'pred_aux': preds_aux[i].tolist() if self.auxiliary_task else np.nan,
-                    'y': y,
-                    'y_aux': y_aux
+                    'pred_aux': preds_aux[i].item() if self.auxiliary_task else np.nan,
+                    'y': y.item(),
+                    'y_aux': y_aux.item()
                 })
 
             return output
@@ -483,6 +483,7 @@ if __name__ == '__main__':
         return data.mean(dim=0), data.std(dim=0)
 
     run = wandb.init(**setup.WANDB_SETTINGS, group='trash', job_type='trash')
+    gnn.save_predictions(run)
     metrics = gnn.train(2, 1000, 1000, run=run)
     mtest = gnn.evaluate(False, run)
     a=0 # for breakpoint

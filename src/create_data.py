@@ -245,8 +245,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write, p
             logging.debug(f'processing item {pt_seg}')
             counter += 1
             culprit = 1 if pt_seg in culprits else 0
-            if name == 'TsviPlusCnc':
-                tsvi = seg_to_tsvi[pt_seg]
+            tsvi = seg_to_tsvi[pt_seg]
             # Graph features (LAD, LDX, RCA)
             graph_features = create_graph_features(pt_seg[-3:])
             # read data
@@ -279,6 +278,10 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write, p
                 segment_data = read_poly_data(path_wss_descriptors.joinpath(f'{pt_seg}_WSSdescriptors.vtp'))
                 segment_data = segment_data.GetPointData().GetArray('TSVI')
                 segment_data = vtk_to_numpy(segment_data)
+            elif name == 'CoordToCnc+Tsvi':
+                y = torch.tensor([culprit, tsvi], dtype=torch.float)
+                segment_data = torch.empty((num_nodes, 0))
+            
             # elif name == 'WssPlusCnc':
             #     wss_mag = np.mean(create_mesh_data(surface,
             #                                        div=False,
@@ -350,7 +353,7 @@ if __name__ == '__main__':
         type=str,
         help='name of dataset to be created',
         default='WssToCnc',
-        choices=['CoordToCnc', 'WssToCnc', 'TsviToCnc', 'WssToCnc&Tsvi']
+        choices=['CoordToCnc', 'WssToCnc', 'TsviToCnc', 'CoordToCnc+Tsvi']
     )
     parser.add_argument(
         '-k', '--augment_data',

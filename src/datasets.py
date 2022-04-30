@@ -309,8 +309,11 @@ class PatientDataset(TorchDataset):
         if remove_edge_weight and 'edge_weight' in data.keys:
             del data.edge_weight
 
+        # Handle 1D <-> 2D tensor problems
         if data.x.ndim == 1:
             data.x = data.x.unsqueeze(-1)
+        if data.y.numel() > 1 and data.y.ndim == 1:
+            data.y = data.y.unsqueeze(0)
 
         return data
 

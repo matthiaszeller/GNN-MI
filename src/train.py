@@ -259,6 +259,7 @@ class GNN:
     def get_losses(self, data: DataLoader) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor,
                                                     torch.Tensor, torch.Tensor, torch.Tensor]:
         """
+        Assumes the data.y is 2D tensor: 1st dim for batch, 2nd dim: elem 0 is y_classif, elems 1: are for regression
         Returns:
             - loss
             - auxiliary loss for regress        (may be empty)
@@ -272,14 +273,16 @@ class GNN:
 
         if self.auxiliary_task:
             yhat, y_regr_hat = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
-            y, y_regr = data.y[0], data.y[1:]
-            loss = self.criterion(yhat, data.y)
+            y, y_regr = data.y[:, 0], data.y[:, 1:]
+            # Need to convert y back to int
+            y = y.to(torch.long)
+            loss = self.criterion(yhat, y)
             aux_loss = self.aux_criterion(y_regr_hat, y_regr)
             return loss, aux_loss, yhat, y_regr_hat, y, y_regr
 
         yhat = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
         loss = self.criterion(yhat, data.y)
-        dummy_aux_loss = torch.tensor([0.0], requires_grad=True)
+        dummy_aux_loss = torch.tensor([0.0], requires_grad=True, device=loss.device)
         return loss, dummy_aux_loss, yhat, torch.empty((0, 0)), data.y, torch.empty((0, 0))
 
     def train(self, epochs: int, early_stop: int, allow_stop: int = 200,
@@ -443,8 +446,8 @@ class GNN:
 if __name__ == '__main__':
     from datasets import split_data
 
-    config_path = 'toolbox/config-4786gy4q.json'
-    #config_path = 'config/config-debug.json'
+    #config_path = 'toolbox/config-4786gy4q.json'
+    config_path = 'config/config-debug.json'
     with open(setup.get_project_root_path().joinpath(config_path)) as f:
         config = json.load(f)
 

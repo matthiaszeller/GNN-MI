@@ -233,7 +233,7 @@ class Regressor(torch.nn.Module):
             Linear(self.num_input_dim, self.num_hidden_dim),
             ELU(alpha=0.1),
             BatchNorm1d(self.num_hidden_dim),
-            Linear(self.num_hidden_dim, self.num_classes)
+            Linear(self.num_hidden_dim, 1)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

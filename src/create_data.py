@@ -233,8 +233,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write, p
 
     # Parse labels
     culprits = read_labels(path_label)
-    if name == 'TsviPlusCnc':
-        seg_to_tsvi = read_tsvi(path_label)
+    seg_to_tsvi = read_tsvi(path_label)
 
     logging.info(f'number of keys in patient dict: {len(patient_dict)}')
 
@@ -281,7 +280,7 @@ def create_data(name, k_neigh, rot_angles, path_input, path_label, path_write, p
             elif name == 'CoordToCnc+Tsvi':
                 y = torch.tensor([culprit, tsvi], dtype=torch.float)
                 segment_data = torch.empty((num_nodes, 0))
-            
+
             # elif name == 'WssPlusCnc':
             #     wss_mag = np.mean(create_mesh_data(surface,
             #                                        div=False,

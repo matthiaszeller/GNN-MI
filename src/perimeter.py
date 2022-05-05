@@ -1,26 +1,39 @@
 
 
+import json
 from copy import deepcopy
 
 import networkx as nx
 import numpy as np
 from scipy.spatial import distance_matrix
-from torch_geometric.utils import to_networkx, from_networkx
+from torch_geometric.utils import to_networkx
 from torch_geometric.utils import to_scipy_sparse_matrix
 
 
-def compute_perimeters(data):
+def compute_perimeters(data, save_path=None):
     a1, a2 = find_edge_annuluses(data.edge_index)
     path = find_path(data, a1, a2)
-
     g, old, new, mapping, reverse_mapping = cut_duplicate_join(data, path)
-    pred, dist = compute_shortest_paths_floyd_warshall(g)
+    res = get_shortest_paths(g, mapping, reverse_mapping, old)
 
-    perimeters = {
-        path[0][0]: path[1]
-        for path in iter_shortest_paths(pred, dist, mapping, reverse_mapping, old)
-    }
-    return perimeters
+    if save_path is not None:
+        with open(save_path, 'w') as f:
+            json.dump(res, f)
+
+
+# For the floyd-warshall algo, super inefficient
+# def compute_perimeters(data):
+#     a1, a2 = find_edge_annuluses(data.edge_index)
+#     path = find_path(data, a1, a2)
+#
+#     g, old, new, mapping, reverse_mapping = cut_duplicate_join(data, path)
+#     pred, dist = compute_shortest_paths_floyd_warshall(g)
+#
+#     perimeters = {
+#         path[0][0]: path[1]
+#         for path in iter_shortest_paths(pred, dist, mapping, reverse_mapping, old)
+#     }
+#     return perimeters
 
 
 def get_neighbours(nnz_r, nnz_c, i):
@@ -241,17 +254,31 @@ def map_path(path, reverse_mapping):
     return [reverse_mapping[u] for u in path]
 
 
-def compute_shortest_paths_floyd_warshall(g):
-    predecessors, distances = nx.floyd_warshall_predecessor_and_distance(g, weight='edge_weight')
-    return predecessors, distances
-
-
-def iter_shortest_paths(predecessors, distances, mapping, reverse_mapping, original_nodes):
+def get_shortest_paths(g, mapping, reverse_mapping, original_nodes):
+    res = []
     for u in original_nodes:
-        path, length = get_path_from_floyd(predecessors, distances, u, mapping[u])
-        path = map_path(path, reverse_mapping)
-        # First and last element of path is u
-        yield path[:-1], length
+        p = nx.shortest_path(g, source=u, target=mapping[u], weight='edge_weight')
+        length = nx.path_weight(g, p, weight='edge_weight')
+        p = map_path(p, reverse_mapping)
+        # np.int64 -> int for serializability when dumping in json
+        p = list(map(int, p))
+        res.append((p, length))
+
+    return res
+
+
+# The code below works but is super inefficient, cubic time w.r.t. num of nodes
+# def compute_shortest_paths_floyd_warshall(g):
+#     predecessors, distances = nx.floyd_warshall_predecessor_and_distance(g, weight='edge_weight')
+#     return predecessors, distances
+#
+#
+# def iter_shortest_paths(predecessors, distances, mapping, reverse_mapping, original_nodes):
+#     for u in original_nodes:
+#         path, length = get_path_from_floyd(predecessors, distances, u, mapping[u])
+#         path = map_path(path, reverse_mapping)
+#         # First and last element of path is u
+#         yield path[:-1], length
 
 
 # Debugging

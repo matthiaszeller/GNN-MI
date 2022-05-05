@@ -1,6 +1,7 @@
 
 
 import json
+import logging
 from copy import deepcopy
 
 import networkx as nx
@@ -17,8 +18,9 @@ def compute_perimeters(data, save_path=None):
     res = get_shortest_paths(g, mapping, reverse_mapping, old)
 
     if save_path is not None:
+        logging.info(f'saving perimeter data in {str(save_path)}')
         with open(save_path, 'w') as f:
-            json.dump(res, f)
+            json.dump(res, f, indent=4)
 
 
 # For the floyd-warshall algo, super inefficient
@@ -37,11 +39,14 @@ def compute_perimeters(data, save_path=None):
 
 
 def get_neighbours(nnz_r, nnz_c, i):
+    """nnz_r, nnz_c can be: edge_index of torch data or scipy.sparse.spmatrix.nonzero()"""
     mask = nnz_r == i
     return nnz_c[mask]
 
 
 def find_edge_annulus(edge_index, start_node, maxiter=1000):
+    """Starting from a node at the edge of the mesh, return all nodes of the annulus
+    The search is based on minimum-degree criterion."""
     nnz_r, nnz_c = edge_index.numpy()
     # Set of visited nodes for efficient computations
     annulus = set([start_node])
@@ -78,6 +83,7 @@ def find_edge_annulus(edge_index, start_node, maxiter=1000):
 
 
 def find_edge_annuluses(edge_index):
+    """Find the two annuluses"""
     # Find nodes with minimal number of neighbours
     A = to_scipy_sparse_matrix(edge_index)
     degree = np.array(A.sum(axis=0)).flatten()
@@ -94,6 +100,7 @@ def find_edge_annuluses(edge_index):
 
 
 def find_path(data, a1, a2):
+    """Return set of nodes connecting nodes in a1 with nodes in a2"""
     net = to_networkx(data)
     return nx.shortest_path(net, source=a1[0], target=a2[0])
 
@@ -109,6 +116,7 @@ def get_all_neighbours(edge_index, nodes):
 
 
 def prepare_cut(data, path):
+    """Given a path cutting the graph in two parts, find its two parallel paths"""
     path_neighbours = get_all_neighbours(data.edge_index, path)
 
     net = to_networkx(data, to_undirected=True)
@@ -127,6 +135,7 @@ def prepare_cut(data, path):
 
 
 def add_edge_weights(data):
+    """Compute edge weights based on Euclidean distances."""
     out = data.clone()
     D = distance_matrix(out.coord, out.coord)
     i1, i2 = out.edge_index
@@ -135,6 +144,7 @@ def add_edge_weights(data):
 
 
 def cut_and_duplicate(weighted_graph, path):
+    """Given a path cutting the weighted graph in two, remove the nodes in the path and duplicate the graph"""
     max_node = max(weighted_graph.nodes)
 
     g1 = deepcopy(weighted_graph)
@@ -157,6 +167,7 @@ def cut_and_duplicate(weighted_graph, path):
 
 
 def join(g1, g2, path_with_attrs, path_edges, c1, c2, mapping):
+    """Merge the original and the duplicated graph, add back nodes from the path and connect it accordingly"""
     # Join the two graphs
     g = nx.union(g1, g2)
     # Nodes of the path will be automatically added when connecting the two graphs,
@@ -199,6 +210,7 @@ def join(g1, g2, path_with_attrs, path_edges, c1, c2, mapping):
 
 
 def collect_nx_edges(g, nodes):
+    """Build a list of (source, target, dict) for all edges involving the `nodes` in `g`"""
     edges = []
     for u in nodes:
         for v, d in g[u].items():
@@ -207,6 +219,7 @@ def collect_nx_edges(g, nodes):
 
 
 def cut_duplicate_join(data, path):
+    """Prepare the graph for shortest path search"""
     data_weighted = add_edge_weights(data)
     weighted_graph = to_networkx(data_weighted, to_undirected=True, edge_attrs=['edge_weight'], node_attrs=['coord'])
 

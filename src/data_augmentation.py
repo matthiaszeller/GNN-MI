@@ -15,7 +15,35 @@ from torch_geometric.data import Data
 from torch_geometric.utils import is_undirected, contains_self_loops, from_scipy_sparse_matrix, to_scipy_sparse_matrix
 from vtk.util.numpy_support import vtk_to_numpy
 
+from multiprocessing import cpu_count, Pool
+
 import setup
+from perimeter import compute_perimeters
+
+
+def compute_dataset_perimeter(input_path: Union[str, Path], output_path: Union[str, Path]):
+    """Compute perimeter at each node of all samples of a dataset in parallel."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    if not output_path.exists():
+        output_path.mkdir()
+
+    data = {
+        file: torch.load(file) for file in input_path.glob('*.pt')
+    }
+
+    args_iterator = (
+        (sample, output_path.joinpath(file.stem + '.json'))
+        for file, sample in data.items()
+    )
+    logging.info('starting perimeter computation')
+    # pool = Pool(cpu_count() - 1)
+    # pool.starmap_async(compute_perimeters, args_iterator)
+    # pool.close()
+    # pool.join()
+    for sample, output_file in args_iterator:
+        compute_perimeters(sample, output_file)
+    logging.info('end of perimeter computation')
 
 
 def transition_matrix(A: scipy.sparse.spmatrix, type='randomwalk') -> scipy.sparse.spmatrix:

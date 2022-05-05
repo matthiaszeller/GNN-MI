@@ -2,25 +2,33 @@
 
 import json
 import logging
+from collections import Counter
 from copy import deepcopy
 
 import networkx as nx
 import numpy as np
+import torch
 from scipy.spatial import distance_matrix
 from torch_geometric.utils import to_networkx
 from torch_geometric.utils import to_scipy_sparse_matrix
 
 
 def compute_perimeters(data, save_path=None):
-    a1, a2 = find_edge_annuluses(data.edge_index)
+    a1, a2 = find_edge_annuluses(data.edge_index, data.coord)
     path = find_path(data, a1, a2)
     g, old, new, mapping, reverse_mapping = cut_duplicate_join(data, path)
     res = get_shortest_paths(g, mapping, reverse_mapping, old)
 
     if save_path is not None:
+        dump = {
+            'annulus_1': list(map(int, a1)),
+            'annulus_2': list(map(int, a2)),
+            'cutting_path': list(map(int, path)),
+            'shortest_paths': res
+        }
         logging.info(f'saving perimeter data in {str(save_path)}')
         with open(save_path, 'w') as f:
-            json.dump(res, f, indent=4)
+            json.dump(dump, f, indent=4)
 
 
 # For the floyd-warshall algo, super inefficient
@@ -44,9 +52,34 @@ def get_neighbours(nnz_r, nnz_c, i):
     return nnz_c[mask]
 
 
-def find_edge_annulus(edge_index, start_node, maxiter=1000):
+def find_edge_annulus(edge_index, start_node, coords, maxiter=1000):
     """Starting from a node at the edge of the mesh, return all nodes of the annulus
     The search is based on minimum-degree criterion."""
+    def angle(u, v):
+        """Angle between two vectors"""
+        cos = u.dot(v) / np.linalg.norm(u) / np.linalg.norm(v)
+        angle = np.arccos(cos) * 360 / (2 * np.pi)
+        return angle
+
+    def select_next_node(n_neighs, current_node, previous_node=None):
+        """For some pathological cases, some nodes at the border have high degree (5 instead of 4)"""
+        counts = Counter(e[1] for e in n_neighs)
+        min_degree = min(counts)
+        # Previous node is None if we are starting the algorithm... then just choose a min degree node
+        if counts[min_degree] == 1 or previous_node is None:
+            return min(n_neighs, key=lambda e: e[1])[0]
+
+        # Otherwise need to break tie: we have a current direction, pick node whose direction has the smallest angle
+        # with the current direction
+        current_direction = coords[current_node] - coords[previous_node]
+        candidates = [e[0] for e in n_neighs if e[1] == min_degree]
+        candidate_directions = [
+            (node, angle(coords[node] - coords[current_node], current_direction))
+            for node in candidates
+        ]
+        return min(candidate_directions, key=lambda e: e[1])[0]
+
+
     nnz_r, nnz_c = edge_index.numpy()
     # Set of visited nodes for efficient computations
     annulus = set([start_node])
@@ -71,7 +104,7 @@ def find_edge_annulus(edge_index, start_node, maxiter=1000):
             (i, len(get_neighbours(nnz_r, nnz_c, i))) for i in neighs
         }
         # Select neighbour with minimal degree
-        next_node = min(n_neighs, key=lambda e: e[1])[0]
+        next_node = select_next_node(n_neighs, current, previous_node=nodes[-2] if hop_counter > 1 else None)
 
         # Add selected node
         annulus.add(next_node)
@@ -82,19 +115,19 @@ def find_edge_annulus(edge_index, start_node, maxiter=1000):
     return nodes
 
 
-def find_edge_annuluses(edge_index):
+def find_edge_annuluses(edge_index, coords):
     """Find the two annuluses"""
     # Find nodes with minimal number of neighbours
     A = to_scipy_sparse_matrix(edge_index)
     degree = np.array(A.sum(axis=0)).flatten()
     sorted_degree = np.argsort(degree)
 
-    annulus1 = find_edge_annulus(edge_index, sorted_degree[0])
+    annulus1 = find_edge_annulus(edge_index, sorted_degree[0], coords)
     # Remove all nodes from annulus 1
     mask = np.isin(sorted_degree, annulus1)
     sorted_degree = sorted_degree[~mask]
 
-    annulus2 = find_edge_annulus(edge_index, sorted_degree[0])
+    annulus2 = find_edge_annulus(edge_index, sorted_degree[0], coords)
 
     return annulus1, annulus2
 
@@ -380,3 +413,7 @@ def gen_tube(n, radius, n_slice, dx=0.1, delta_angle=np.pi / 8):
 
     return g
 
+
+if __name__ == '__main__':
+    data=torch.load('../data/CHUV03_LAD.pt')
+    compute_perimeters(data, 'trash.json')

@@ -24,6 +24,7 @@ from perimeter import compute_perimeters, parse_perimeter_data
 def create_dataset_with_perimeter(input_dset: Union[str, Path],
                                   perimeter_dset: Union[str, Path], output_dset: Union[str, Path]):
     input_dset, output_dset = Path(input_dset), Path(output_dset)
+    perimeter_dset = Path(perimeter_dset)
     if not output_dset.exists():
         output_dset.mkdir()
 

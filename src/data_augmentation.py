@@ -47,7 +47,7 @@ def create_dataset_with_perimeter(input_dset: Union[str, Path],
         # Concatenate node features along 2nd dimension
         sample.x = torch.concat((sample.x, perim_data), dim=1)
 
-        output_file = output_dset.joinpath(file)
+        output_file = output_dset.joinpath(file.name)
         logging.info(f'writing output in {output_file}')
         torch.save(sample, output_file)
 

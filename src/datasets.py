@@ -312,7 +312,7 @@ class PatientDataset(TorchDataset):
         # Handle 1D <-> 2D tensor problems
         if data.x.ndim == 1:
             data.x = data.x.unsqueeze(-1)
-        if data.y.numel() > 1 and data.y.ndim == 1:
+        if isinstance(data.y, torch.Tensor) and data.y.numel() > 1 and data.y.ndim == 1:
             data.y = data.y.unsqueeze(0)
 
         return data
@@ -380,6 +380,7 @@ def check_splits(test_split: PatientDataset, split_list: List[Tuple[PatientDatas
 if __name__ == '__main__':
     from torch_geometric.loader import DataLoader
 
+    #path_dataset = setup.get_dataset_path('CoordToCnc_perimeter')
     path_dataset = setup.get_dataset_path('TsviToCnc')
 
     test_split, ((train, val), ) = split_data(path_dataset, num_node_features=1, seed=0, valid_ratio=0.2,

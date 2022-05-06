@@ -72,6 +72,9 @@ class GNN:
         self.auxiliary_task = config.get('model.aux_task', False)
         if self.auxiliary_task:
             self.aux_loss_weight = config['model.aux_loss_weight']
+            # Sanity check
+            if isinstance(train_set[0].y, int) or train_set[0].y.shape[-1] == 1:
+                raise ValueError('auxiliary learning mode but y has size 1')
         else:
             self.aux_loss_weight = 0.0
 
@@ -210,6 +213,8 @@ class GNN:
                     pred = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
                     if self.auxiliary_task:
                         pred, pred_aux = pred
+                    else:
+                        pred_aux = torch.empty((0, 0))
                     preds.append(pred.detach().cpu().numpy())
                     preds_aux.append(pred_aux.detach().cpu().numpy())
 
@@ -218,7 +223,9 @@ class GNN:
             output = []
             for i in range(len(dataset)):
                 sample = dataset.get(i)
-                y = sample.y.squeeze()
+                y = sample.y
+                if isinstance(y, torch.Tensor):
+                    y = y.squeeze()
                 if self.auxiliary_task:
                     y, y_aux = y[0], y[1:]
                 else:
@@ -229,8 +236,8 @@ class GNN:
                     'g_x': sample.g_x.tolist(),
                     'pred': preds[i].tolist(),
                     'pred_aux': preds_aux[i].item() if self.auxiliary_task else np.nan,
-                    'y': y.item(),
-                    'y_aux': y_aux.item()
+                    'y': y.item() if isinstance(y, torch.Tensor) else y,
+                    'y_aux': y_aux.item() if isinstance(y_aux, torch.Tensor) else y_aux
                 })
 
             return output
@@ -484,7 +491,7 @@ if __name__ == '__main__':
 
     run = wandb.init(**setup.WANDB_SETTINGS, group='trash', job_type='trash')
     gnn.save_predictions(run)
-    metrics = gnn.train(2, 1000, 1000, run=run)
+    metrics = gnn.train(1, 1000, 1000, run=run)
     mtest = gnn.evaluate(False, run)
     a=0 # for breakpoint
 

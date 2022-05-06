@@ -144,9 +144,21 @@ One can provide several arguments, e.g. the type of dataset to generate and the 
 Note that by default, path to data sources are automatically inferred from `get_path_data()` 
 (see path management section above).
 
-For rotations, one must directly encode them in the script.
 
-#### Recommended workflow
+#### Example workflow for perimeter computation
+
+Use the function `data_augmentation.compute_dataset_perimeter` to create a new folder with shortest path data.
+Example:
+```python
+compute_dataset_perimeter('CoordToCnc', 'perimeter')
+```
+
+Then augment a dataset with perimeter features:
+```python
+
+```
+
+#### Example workflow for KNN data augmentation
 
 Create the dataset with both KNN and rotation augmentation once, then manually create two datasets out of it.
 

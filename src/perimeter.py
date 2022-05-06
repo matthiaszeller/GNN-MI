@@ -1,9 +1,21 @@
 
+"""
+Computation of perimeter.
+This module is called by data_augmentation.compute_dataset_perimeter.
+
+As this data processing step is quite expensive and might be error prone,
+we dump extensive data related to perimeter computations in a separate folder.
+This enables a posteriori analysis and manual sanity checks.
+
+To understand perimeter computation, the related notebook might be more enlightening than reading this code!
+"""
 
 import json
 import logging
 from collections import Counter
 from copy import deepcopy
+from pathlib import Path
+from typing import Union
 
 import networkx as nx
 import numpy as np
@@ -12,8 +24,11 @@ from scipy.spatial import distance_matrix
 from torch_geometric.utils import to_networkx
 from torch_geometric.utils import to_scipy_sparse_matrix
 
+import setup
+
 
 def compute_perimeters(data, save_path=None):
+    """Entry point to compute perimeter."""
     a1, a2 = find_edge_annuluses(data.edge_index, data.coord)
     path = find_path(data, a1, a2)
     g, old, new, mapping, reverse_mapping = cut_duplicate_join(data, path)
@@ -30,6 +45,29 @@ def compute_perimeters(data, save_path=None):
         with open(save_path, 'w') as f:
             json.dump(dump, f, indent=4)
 
+
+def parse_perimeter_data(json_file: Union[str, Path]) -> torch.Tensor:
+    """Return a tensor of node perimeter."""
+    with open(json_file) as f:
+        data = json.load(f)
+
+    paths = data['shortest_paths']
+    perimeters = []
+    for path, path_length in paths:
+        start_node = path[0]
+        perimeters.append((start_node, path_length))
+    # Order w.r.t. node ids
+    sorted_perim = sorted(perimeters, key=lambda e: e[0])
+    # Extract perimeters in the right order
+    perimeters = torch.tensor([
+        e[1] for e in sorted_perim
+    ]).to(torch.float)
+    return perimeters
+
+
+# ---------------------------------------------------------------- #
+#                           ROUTINES                               #
+# ---------------------------------------------------------------- #
 
 # For the floyd-warshall algo, super inefficient
 # def compute_perimeters(data):
@@ -415,5 +453,10 @@ def gen_tube(n, radius, n_slice, dx=0.1, delta_angle=np.pi / 8):
 
 
 if __name__ == '__main__':
-    data=torch.load('../data/CHUV03_LAD.pt')
-    compute_perimeters(data, 'trash.json')
+    path_perim = setup.get_dataset_path('perimeters')
+    sample = 'CHUV03_LAD'
+
+    perim = parse_perimeter_data(path_perim.joinpath(sample + '.json'))
+
+    data = torch.load(setup.get_dataset_path('CoordToCnc').joinpath(sample + '.pt'))
+

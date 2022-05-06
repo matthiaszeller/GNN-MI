@@ -18,7 +18,37 @@ from vtk.util.numpy_support import vtk_to_numpy
 from multiprocessing import cpu_count, Pool
 
 import setup
-from perimeter import compute_perimeters
+from perimeter import compute_perimeters, parse_perimeter_data
+
+
+def create_dataset_with_perimeter(input_dset: Union[str, Path],
+                                  perimeter_dset: Union[str, Path], output_dset: Union[str, Path]):
+    input_dset, output_dset = Path(input_dset), Path(output_dset)
+    if not output_dset.exists():
+        output_dset.mkdir()
+
+    logging.info('creating dataset with perimeter')
+    files_dset = list(input_dset.glob('*.pt'))
+    files_perim = list(perimeter_dset.glob('*.json'))
+    patients = set(file.stem for file in files_perim)
+    patients = patients.intersection(file.stem for file in files_perim)
+    if len(patients) != len(files_dset) or len(patients) != len(files_perim):
+        raise ValueError('intersection of patients do not match')
+
+    for file in input_dset.glob('*.pt'):
+        logging.info(f'parsing torch data and perimeter data for {file.stem}')
+        # Load torch graph data
+        sample = torch.load(file)
+        # Parse perimeter data
+        perim_data = parse_perimeter_data(perimeter_dset.joinpath(file.stem + '.json'))
+        # Reshape
+        perim_data = perim_data.reshape(-1, 1)
+        # Concatenate node features along 2nd dimension
+        sample.x = torch.concat((sample.x, perim_data), dim=1)
+
+        output_file = output_dset.joinpath(file)
+        logging.info(f'writing output in {output_file}')
+        torch.save(sample, output_file)
 
 
 def compute_dataset_perimeter(input_path: Union[str, Path], output_path: Union[str, Path]):

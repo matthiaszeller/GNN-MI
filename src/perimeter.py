@@ -15,13 +15,14 @@ import logging
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
-from typing import Union
+from typing import Union, Dict, Any
 
 import networkx as nx
 import numpy as np
 import torch
 from scipy.spatial import distance_matrix
-from torch_geometric.utils import to_networkx
+from torch_geometric.data import Data
+from torch_geometric.utils import to_networkx, from_networkx
 from torch_geometric.utils import to_scipy_sparse_matrix
 
 import setup
@@ -30,20 +31,24 @@ import setup
 def compute_perimeters(data, save_path=None):
     """Entry point to compute perimeter."""
     a1, a2 = find_edge_annuluses(data.edge_index, data.coord)
-    path = find_path(data, a1, a2)
-    g, old, new, mapping, reverse_mapping = cut_duplicate_join(data, path)
+
+    data_weighted = add_edge_weights(data)
+    path = find_path(data_weighted, a1, a2)
+    g, old, new, mapping, reverse_mapping = cut_duplicate_join(data_weighted, path)
     res = get_shortest_paths(g, mapping, reverse_mapping, old)
 
+    dump = {
+        'annulus_1': list(map(int, a1)),
+        'annulus_2': list(map(int, a2)),
+        'cutting_path': list(map(int, path)),
+        'shortest_paths': res
+    }
     if save_path is not None:
-        dump = {
-            'annulus_1': list(map(int, a1)),
-            'annulus_2': list(map(int, a2)),
-            'cutting_path': list(map(int, path)),
-            'shortest_paths': res
-        }
         logging.info(f'saving perimeter data in {str(save_path)}')
         with open(save_path, 'w') as f:
             json.dump(dump, f, indent=4)
+
+    return dump
 
 
 def parse_perimeter_data(json_file: Union[str, Path]) -> torch.Tensor:
@@ -63,6 +68,27 @@ def parse_perimeter_data(json_file: Union[str, Path]) -> torch.Tensor:
         e[1] for e in sorted_perim
     ]).to(torch.float)
     return perimeters
+
+
+def get_perimeter_along_path(sample: Dict[str, Any]):
+    perim_mapping = {
+        path[0]: length
+        for path, length in sample['shortest_paths']
+    }
+    perimeters = [
+        perim_mapping[node]
+        for node in sample['cutting_path']
+    ]
+    return np.array(perimeters)
+
+
+def get_perimeter_data(perim_data: Dict[str, Any], torch_data: Data):
+    perimeters = get_perimeter_along_path(perim_data)
+    distances = torch_data.coord[perim_data['cutting_path'][1:]] - torch_data.coord[perim_data['cutting_path'][:-1]]
+    distances = distances.norm(dim=1).flatten()
+    distances = torch.concat((torch.zeros(1), distances))
+    distances = np.cumsum(distances)
+    return distances, perimeters
 
 
 # ---------------------------------------------------------------- #
@@ -170,10 +196,20 @@ def find_edge_annuluses(edge_index, coords):
     return annulus1, annulus2
 
 
-def find_path(data, a1, a2):
+def find_path(data_weighted, a1, a2):
     """Return set of nodes connecting nodes in a1 with nodes in a2"""
-    net = to_networkx(data)
-    return nx.shortest_path(net, source=a1[0], target=a2[0])
+    net = to_networkx(data_weighted, to_undirected=True, edge_attrs=['edge_weight'])
+    # Single-source shortest path
+    paths = nx.shortest_path(net, source=a1[0], weight='edge_weight')
+    a2 = set(a2)
+    candidates = {
+        k: (v, nx.path_weight(net, v, 'edge_weight'))
+        for k, v in paths.items()
+        if k in a2
+    }
+    winner_target = min(candidates.keys(), key=lambda cand: candidates[cand][1])
+    shortest_path = candidates[winner_target][0]
+    return shortest_path
 
 
 def get_all_neighbours(edge_index, nodes):
@@ -289,16 +325,15 @@ def collect_nx_edges(g, nodes):
     return edges
 
 
-def cut_duplicate_join(data, path):
+def cut_duplicate_join(data_weighted, path):
     """Prepare the graph for shortest path search"""
-    data_weighted = add_edge_weights(data)
     weighted_graph = to_networkx(data_weighted, to_undirected=True, edge_attrs=['edge_weight'], node_attrs=['coord'])
 
     path_edges = collect_nx_edges(weighted_graph, path)
 
     g1, g2, old_nodes, new_nodes, mapping = cut_and_duplicate(weighted_graph, path)
 
-    c1, c2 = prepare_cut(data, path)
+    c1, c2 = prepare_cut(data_weighted, path)
 
     path_with_attrs = [
         (u, weighted_graph.nodes[u]) for u in path
@@ -407,7 +442,7 @@ def rotation_matrix_yz(theta):
     ])
 
 
-def gen_next_annulus(g, prev_annulus, dx, delta_angle):
+def gen_next_annulus(g, prev_annulus, dx, delta_angle, contract=1.0):
     positions = nx.get_node_attributes(g, 'coord')
     R = rotation_matrix_yz(delta_angle)
 
@@ -415,8 +450,10 @@ def gen_next_annulus(g, prev_annulus, dx, delta_angle):
     dx += (np.random.rand() * 2 - 1) * dx / 2
 
     dpos = np.array([dx, 0.0, 0.0])
+    mpos = np.array([1.0, contract, contract])
+    random_dpos = lambda: (np.random.rand() * 2 - 1) * dx / 6
     new_pos = {
-        u: R @ positions[u] + dpos
+        u: (R @ positions[u]) * mpos + dpos + np.array([random_dpos(), 0, 0])
         for u in prev_annulus
     }
     max_node = max(g.nodes)
@@ -452,11 +489,34 @@ def gen_tube(n, radius, n_slice, dx=0.1, delta_angle=np.pi / 8):
     return g
 
 
+def gen_cone(n, radius1, radius2, n_slice, dx=0.1, delta_angle=np.pi / 8):
+    g, annulus = gen_init_annulus(n, radius1)
+    radii = {
+        u: radius1
+        for u in annulus
+    }
+
+    prev_annulus = annulus
+    contraction_rate = (radius2 / radius1) ** (1 / (n_slice - 1))
+    current_radius = radius1
+    for i in range(1, n_slice):
+        current_radius *= contraction_rate
+        g, prev_annulus = gen_next_annulus(g, prev_annulus, dx, delta_angle, contract=contraction_rate)
+        for u in prev_annulus:
+            radii[u] = current_radius
+
+    return g, radii
+
+
 if __name__ == '__main__':
-    path_perim = setup.get_dataset_path('perimeters')
-    sample = 'CHUV03_LAD'
+    # path_perim = setup.get_dataset_path('perimeters')
+    # sample = 'CHUV03_LAD'
+    #
+    # perim = parse_perimeter_data(path_perim.joinpath(sample + '.json'))
+    #
+    # data = torch.load(setup.get_dataset_path('CoordToCnc').joinpath(sample + '.pt'))
 
-    perim = parse_perimeter_data(path_perim.joinpath(sample + '.json'))
-
-    data = torch.load(setup.get_dataset_path('CoordToCnc').joinpath(sample + '.pt'))
+    cone, radii = gen_cone(15, 5.0, 2.0, 10, dx=1)
+    data_cone = from_networkx(cone)
+    res = compute_perimeters(data_cone)
 

@@ -1,5 +1,4 @@
-
-
+import json
 import logging
 from math import factorial
 from pathlib import Path
@@ -18,7 +17,80 @@ from vtk.util.numpy_support import vtk_to_numpy
 from multiprocessing import cpu_count, Pool
 
 import setup
+from graph_linalg import get_laplacian, matrix_exponentials
 from perimeter import compute_perimeters, parse_perimeter_data
+
+
+def create_sample_graph_features(sample: Data, tau_0: float, kmax: int, weighted_adj: bool = True):
+    # Compute Laplacien
+    if weighted_adj:
+        sample = add_edge_weights(sample, inverse=True)
+        A = to_scipy_sparse_matrix(sample.edge_index, edge_attr=sample.edge_weight)
+        L = get_laplacian(A)
+    else:
+        L = get_laplacian(to_scipy_sparse_matrix(sample.edge_index))
+
+    # Features with original signals
+    features = [
+        [x.T @ L @ x for x in sample.x.T.numpy()]
+    ]
+
+    # Filtered features
+    if tau_0 is not None and kmax is not None:
+        logging.debug('computing matrix exponentials')
+        for Ek in matrix_exponentials(L, tau_0, kmax):
+            buffer = []
+            for x in sample.x.T.numpy():
+                # Filtered signal
+                xtilde = Ek @ x
+                buffer.append(xtilde.T @ L @ xtilde)
+            features.append(buffer)
+
+    features = torch.tensor(features).to(torch.float)
+    return features
+
+
+def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Union[str, Path],
+                                  tau_0: float = None, kmax: int = None, weighted_adj: bool = True):
+    """
+    Extract graph features using quadratic forms with the Laplacian.
+    For each node feature x, we create several node features yi^T L yi, where
+        - y0 is the original signal x
+        - yk, k = 1, ..., kmax is the filtered signal yk = exp(-tau_0 * k * L) x
+    """
+    input_dset, output_dset = Path(input_dset), Path(output_dset)
+    if not output_dset.exists():
+        output_dset.mkdir()
+
+    logging.info('extracting graph features')
+    results = dict()
+    for file in input_dset.glob('*.pt'):
+        logging.info(f'processing file {file.name}')
+        sample = torch.load(file)
+        features = create_sample_graph_features(sample, tau_0, kmax, weighted_adj)
+        results[file.stem] = features
+
+    output_file = output_dset.joinpath('graph_features.json')
+    dump = {
+        'input_dset': input_dset.name,
+        'tau0': tau_0,
+        'kmax': kmax,
+        'features': results
+    }
+    logging.info(f'writing in output file {output_file.name}')
+    with open(output_file) as f:
+        json.dump(dump, f, indent=4)
+
+
+def add_edge_weights(data, inverse: bool = True):
+    """Compute edge weights based on Euclidean distances."""
+    out = data.clone()
+    D = distance_matrix(out.coord, out.coord)
+    i1, i2 = out.edge_index
+    out.edge_weight = torch.from_numpy(D[i1, i2])
+    if inverse:
+        out.edge_weight = 1/out.edge_weight
+    return out
 
 
 def create_dataset_with_perimeter(input_dset: Union[str, Path],
@@ -349,17 +421,21 @@ def augment_dataset(
 
 if __name__ == '__main__':
 
-    path = setup.get_dataset_path('CoordToCnc')
+    path = setup.get_dataset_path('CoordToCnc_perimeters')
 
-    augment_dataset(
-        create_diffusion_data,
-        path,
-        path.parent.joinpath('CoordToCnc_diffusion'),
-        'diffusion',
-        kernel='heat',
-        threshold=0.1,
-        param=1.0
-    )
+    create_dataset_graph_features(path, path.parent.joinpath('perimeters_graph_features'), tau_0=0.1, kmax=5)
+
+    # path = setup.get_dataset_path('CoordToCnc')
+    #
+    # augment_dataset(
+    #     create_diffusion_data,
+    #     path,
+    #     path.parent.joinpath('CoordToCnc_diffusion'),
+    #     'diffusion',
+    #     kernel='heat',
+    #     threshold=0.1,
+    #     param=1.0
+    # )
     #
     # for file in path.glob('*.pt'):
     #     S = create_diffusion_data(torch.load(file), threshold=1e-2)

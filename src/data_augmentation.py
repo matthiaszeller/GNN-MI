@@ -17,7 +17,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 from multiprocessing import cpu_count, Pool
 
 import setup
-from graph_linalg import get_laplacian, matrix_exponentials
+from graph_linalg import get_laplacian, matrix_exponentials, quadratic_forms_expm
 from perimeter import compute_perimeters, parse_perimeter_data
 
 
@@ -31,22 +31,18 @@ def create_sample_graph_features(sample: Data, tau_0: float, kmax: int, weighted
         L = get_laplacian(to_scipy_sparse_matrix(sample.edge_index))
 
     # Features with original signals
-    features = [
-        [x.T @ L @ x for x in sample.x.T.numpy()]
-    ]
+    features = torch.tensor([
+        x.T @ L @ x for x in sample.x.T.numpy()
+    ]).reshape(-1, 1)
 
     # Filtered features
+    buffer = []
     if tau_0 is not None and kmax is not None:
-        logging.debug('computing matrix exponentials')
-        for Ek in matrix_exponentials(L, tau_0, kmax):
-            buffer = []
-            for x in sample.x.T.numpy():
-                # Filtered signal
-                xtilde = Ek @ x
-                buffer.append(xtilde.T @ L @ xtilde)
-            features.append(buffer)
+        for x in sample.x.T.numpy():
+            quad_forms = quadratic_forms_expm(L, x, tau_0, kmax)
+            buffer.append(quad_forms)
 
-    features = torch.tensor(features).to(torch.float)
+    features = torch.concat((features, torch.tensor(buffer)), dim=1).to(torch.float).T
     return features
 
 
@@ -69,8 +65,9 @@ def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Uni
         sample = torch.load(file)
         features = create_sample_graph_features(sample, tau_0, kmax, weighted_adj)
         results[file.stem] = features
+        break
 
-    output_file = output_dset.joinpath('graph_features.json')
+    output_file = output_dset.joinpath('graph_features.pt')
     dump = {
         'input_dset': input_dset.name,
         'tau0': tau_0,
@@ -78,8 +75,7 @@ def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Uni
         'features': results
     }
     logging.info(f'writing in output file {output_file.name}')
-    with open(output_file) as f:
-        json.dump(dump, f, indent=4)
+    torch.save(dump, output_file)
 
 
 def add_edge_weights(data, inverse: bool = True):

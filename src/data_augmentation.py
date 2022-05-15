@@ -81,9 +81,12 @@ def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Uni
 def add_edge_weights(data, inverse: bool = True):
     """Compute edge weights based on Euclidean distances."""
     out = data.clone()
-    D = distance_matrix(out.coord, out.coord)
+    #D = distance_matrix(out.coord, out.coord)
+    #i1, i2 = out.edge_index
+    #out.edge_weight = torch.from_numpy(D[i1, i2])
     i1, i2 = out.edge_index
-    out.edge_weight = torch.from_numpy(D[i1, i2])
+    c1, c2 = out.coord[i1], out.coord[i2]
+    out.edge_weight = (c1 - c2).norm(dim=-1)
     if inverse:
         out.edge_weight = 1/out.edge_weight
     return out

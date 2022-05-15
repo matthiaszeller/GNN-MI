@@ -65,7 +65,6 @@ def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Uni
         sample = torch.load(file)
         features = create_sample_graph_features(sample, tau_0, kmax, weighted_adj)
         results[file.stem] = features
-        break
 
     output_file = output_dset.joinpath('graph_features.pt')
     dump = {

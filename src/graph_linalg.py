@@ -5,7 +5,7 @@ import scipy as sp
 from scipy.linalg import expm
 from scipy.spatial import distance_matrix
 from scipy import sparse
-from scipy.sparse.linalg import expm_multiply
+from scipy.sparse.linalg import expm_multiply, eigsh
 
 
 def get_laplacian(A: sparse.spmatrix):
@@ -17,11 +17,25 @@ def get_laplacian(A: sparse.spmatrix):
     return L
 
 
+def get_laplacian_spectral_bounds(L: sparse.spmatrix, n_eigs: int):
+    """
+    Get `n_eigs` largest eigenvalues of the Laplacian and `n_eigs` smallest eigenvalues of Laplacian.
+    Since the laplacian is SPD,
+    """
+    assert (L - L.T != 0).sum() == 0
+    # Largest eigenvalues
+    emax = eigsh(L, k=n_eigs, return_eigenvectors=False)
+    # Smallest
+    emin = eigsh(L, k=n_eigs, return_eigenvectors=False, sigma=-0.1)
+    return np.array([emin, emax])
+
+
 def quadratic_forms_expm(L: sparse.spmatrix, x: np.ndarray, tau_0: float, kmax: int) -> np.ndarray:
     """
     Compute quadratic forms z_i^T L z_i, where the z_i vectors are a filtered version of the x signal.
     Define the matrix exponential M_i = exp(-tau_0 * i * L),
     then z_i = M_i x.
+    Avoid explicit matrix exponential computation by using specialized algorithm.
     """
     e = expm_multiply(L, x, start=-tau_0 * kmax, stop=-tau_0, num=kmax, endpoint=True)
     quadratic_forms = np.array([
@@ -32,6 +46,7 @@ def quadratic_forms_expm(L: sparse.spmatrix, x: np.ndarray, tau_0: float, kmax: 
 
 def matrix_exponentials(L: sparse.spmatrix, tau_0: float, kmax: int):
     """
+    DEPRECATED, too slow.
     Compute the matrix exponentials exp(-tau_0 * k * L) with all values of k in (1, 2, ..., kmax)
     Done by first computing matrix eponential E_0 = exp(-tau_0 L), then E_i = E_0^i = E_{i-1} @ E_0
     """

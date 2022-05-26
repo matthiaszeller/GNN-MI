@@ -2,7 +2,7 @@ import json
 import logging
 from math import factorial
 from pathlib import Path
-from typing import Callable, Union
+from typing import Callable, Union, Iterable
 
 import numpy as np
 import pygsp
@@ -18,10 +18,21 @@ from multiprocessing import cpu_count, Pool
 
 import setup
 from graph_linalg import get_laplacian, matrix_exponentials, quadratic_forms_expm
-from perimeter import compute_perimeters, parse_perimeter_data
+from perimeter import compute_perimeters, parse_perimeter_data, parse_perimeter_data_nodewise
 
 
-def create_sample_graph_features(sample: Data, tau_0: float, kmax: int, weighted_adj: bool = True):
+def create_sample_graph_features(sample: Data, taus, weighted_adj: bool = True, normalize: bool = True):
+    """
+    Compute graph-level features using quadratic forms. If tau_0 and kmax are None, the output is a single
+    scalar: x^T L x with L the Laplacian.
+
+    If tau_0 and kmax are not None, the output has kmax additional features computed with
+    quadratic_forms_expm (see its related documentation).
+
+    :param sample: the torch_geometric data sample
+    :param tau_0, kmax: passed to quadratic_forms_expm
+    :param normalize: whether to normalize the features by the number of nodes
+    """
     # Compute Laplacien
     if weighted_adj:
         sample = add_edge_weights(sample, inverse=True)
@@ -37,17 +48,22 @@ def create_sample_graph_features(sample: Data, tau_0: float, kmax: int, weighted
 
     # Filtered features
     buffer = []
-    if tau_0 is not None and kmax is not None:
+    if taus is not None:
         for x in sample.x.T.numpy():
-            quad_forms = quadratic_forms_expm(L, x, tau_0, kmax)
+            quad_forms = quadratic_forms_expm(L, x, taus)
             buffer.append(quad_forms)
 
     features = torch.concat((features, torch.tensor(buffer)), dim=1).to(torch.float).T
+    if normalize:
+        features /= sample.x.shape[0]
+    else:
+        logging.warning('the features are *not* normalized by number of nodes')
+
     return features
 
 
 def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Union[str, Path],
-                                  tau_0: float = None, kmax: int = None, weighted_adj: bool = True):
+                                  taus: Iterable[float], weighted_adj: bool = True):
     """
     Extract graph features using quadratic forms with the Laplacian.
     For each node feature x, we create several node features yi^T L yi, where
@@ -55,6 +71,8 @@ def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Uni
         - yk, k = 1, ..., kmax is the filtered signal yk = exp(-tau_0 * k * L) x
     """
     input_dset, output_dset = Path(input_dset), Path(output_dset)
+    if not input_dset.exists():
+        raise ValueError('input path does not exist')
     if not output_dset.exists():
         output_dset.mkdir()
 
@@ -63,14 +81,13 @@ def create_dataset_graph_features(input_dset: Union[str, Path], output_dset: Uni
     for file in input_dset.glob('*.pt'):
         logging.info(f'processing file {file.name}')
         sample = torch.load(file)
-        features = create_sample_graph_features(sample, tau_0, kmax, weighted_adj)
+        features = create_sample_graph_features(sample, taus, weighted_adj)
         results[file.stem] = features
 
     output_file = output_dset.joinpath('graph_features.pt')
     dump = {
         'input_dset': input_dset.name,
-        'tau0': tau_0,
-        'kmax': kmax,
+        'taus': list(taus),
         'features': results
     }
     logging.info(f'writing in output file {output_file.name}')
@@ -111,7 +128,7 @@ def create_dataset_with_perimeter(input_dset: Union[str, Path],
         # Load torch graph data
         sample = torch.load(file)
         # Parse perimeter data
-        perim_data = parse_perimeter_data(perimeter_dset.joinpath(file.stem + '.json'))
+        perim_data = parse_perimeter_data_nodewise(perimeter_dset.joinpath(file.stem + '.json'))
         # Reshape
         perim_data = perim_data.reshape(-1, 1)
         # Concatenate node features along 2nd dimension
@@ -421,7 +438,10 @@ if __name__ == '__main__':
 
     path = setup.get_dataset_path('CoordToCnc_perimeters')
 
-    create_dataset_graph_features(path, path.parent.joinpath('perimeters_graph_features'), tau_0=0.1, kmax=5)
+    create_dataset_graph_features('/media/maousi/Data/tmp/gnn-mi/CoordToCnc_perimeters',
+                                  '/media/maousi/Data/tmp/gnn-mi/graph_features', [1,3,5,9])
+    a = 0
+    #create_dataset_graph_features(path, path.parent.joinpath('perimeters_graph_features'), tau_0=0.1, kmax=5)
 
     # path = setup.get_dataset_path('CoordToCnc')
     #

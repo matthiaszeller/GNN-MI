@@ -109,7 +109,8 @@ class GNN:
                                  num_hidden_dim=config['num_hidden_dim'],
                                  num_graph_features=config['dataset.num_graph_features'],
                                  num_node_features=train_set.num_node_features,
-                                 num_gin=config['num_gin'])
+                                 num_gin=config['num_gin'],
+                                 use_coords=config.get('model.use_coords', True))
         else:
             raise ValueError('unrecognized model type')
 

@@ -411,7 +411,7 @@ class EGNNMastered(GNNBase):
 
 class GIN_GNN(GNNBase):
     def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int,
-                 num_node_features: int = 0, num_gin: int = 2):
+                 num_node_features: int = 0, num_gin: int = 2, use_coords: bool = True):
         """
         @param num_classes: see BaseGNN
         @param num_node_features: number of features per node
@@ -425,12 +425,14 @@ class GIN_GNN(GNNBase):
         self.num_gin = num_gin
         self.num_hidden_dim = num_hidden_dim
         self.num_node_features = num_node_features
+        self.use_coords = use_coords
 
+        input_additional_dim = 3 if self.use_coords else 0
         self.gin_layers = nn.Sequential('x, edge_index',
             [
                 (
                     # +3 because of x-y-z coordinates
-                    GINActivatedModule(self.num_node_features + 3, self.num_hidden_dim, self.num_hidden_dim),
+                    GINActivatedModule(self.num_node_features + input_additional_dim, self.num_hidden_dim, self.num_hidden_dim),
                     'x, edge_index -> x, edge_index'
                 )
             ] + [
@@ -444,7 +446,11 @@ class GIN_GNN(GNNBase):
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
-        gin_input = torch.cat((h0, coord0), dim=1)
+        if self.use_coords:
+            gin_input = torch.cat((h0, coord0), dim=1)
+        else:
+            gin_input = h0
+
         h, _ = self.gin_layers(gin_input, edge_index)
 
         # Graph pooling operations

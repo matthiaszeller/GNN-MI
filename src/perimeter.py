@@ -51,12 +51,23 @@ def compute_perimeters(data, save_path=None):
     return dump
 
 
-def parse_perimeter_data(json_file: Union[str, Path]) -> torch.Tensor:
-    """Return a tensor of node perimeter."""
+def parse_perimeter_data(json_file: Union[str, Path]) -> Dict[str, Any]:
+    """Get a dict object representing perimeter data"""
     with open(json_file) as f:
         data = json.load(f)
 
     paths = data['shortest_paths']
+    perimeters = {
+        path[0]: path_length
+        for path, path_length in paths
+    }
+    data['perimeters'] = perimeters
+    return data
+
+
+def parse_perimeter_data_nodewise(json_file: Union[str, Path]) -> torch.Tensor:
+    """Return a tensor of node perimeter."""
+    paths = parse_perimeter_data(json_file)['perimeters']
     perimeters = []
     for path, path_length in paths:
         start_node = path[0]

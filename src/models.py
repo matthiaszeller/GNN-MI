@@ -444,6 +444,10 @@ class GIN_GNN(GNNBase):
             ]
         )
 
+        self.pooler = GraphPooler(self.num_hidden_dim)
+        self.classifier = Classifier(self.pooler.output_dim + self.num_graph_features,
+                                     self.num_hidden_dim, self.num_classes)
+
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
         if self.use_coords:
@@ -454,10 +458,9 @@ class GIN_GNN(GNNBase):
         h, _ = self.gin_layers(gin_input, edge_index)
 
         # Graph pooling operations
-        x1 = self.gmp(h, batch)
-        x2 = self.gap(h, batch)
+        pooled = self.pooler(h, batch)
 
-        x = torch.cat((x1, x2, g0), dim=1)  # TODO: Change this into a one-hot-encoding
+        x = torch.cat((pooled, g0), dim=1)  # TODO: Change this into a one-hot-encoding
         x = self.classifier(x)
         return x
 

@@ -4,6 +4,7 @@ import logging
 import os
 import pickle
 from collections import Counter
+from copy import deepcopy, copy
 from pathlib import Path
 from typing import Union, List, Tuple
 
@@ -183,6 +184,49 @@ class PatientDataset(TorchDataset):
 
         self._node_feat_transform = node_feat_transform
         self.transform_node_feat()
+
+    def __add__(self, other):
+        if not isinstance(other, PatientDataset):
+            raise TypeError
+
+        new = deepcopy(self)
+        if other.path != self.path:
+            new.path = None
+        if other.train != self.train:
+            new.train = None
+
+        new._data.extend(deepcopy(other._data))
+        new.length = len(new._data)
+        new.patients.extend(other.patients)
+        return new
+
+    def split(self, test_ratio: float = 0.2):
+        ids = np.arange(self.length)
+        tr, te = train_test_split(ids, test_size=test_ratio)
+
+        patients = [
+            [
+                self.patients[i]
+                for i in id_list
+            ] for id_list in (tr, te)
+        ]
+        data = [
+            [
+                self._data[i]
+                for i in id_list
+            ] for id_list in (tr, te)
+        ]
+        d_tr, d_te = copy(self), copy(self)
+
+        d_tr.patients = patients[0]
+        d_tr._data = data[0]
+        d_tr.length = len(data[0])
+
+        d_te.patients = patients[1]
+        d_te._data = data[1]
+        d_te.length = len(data[1])
+
+        return d_tr, d_te
 
     def transform_node_feat(self):
         if self._node_feat_transform is None:
@@ -388,7 +432,7 @@ if __name__ == '__main__':
                                               )#node_feat_transform='fourier')
 
     #check_splits(test_split, split_list)
-
+    test_split.split(0.1)
     sampler = train.get_weighted_sampler('artery')
     train_loader = DataLoader(train, batch_size=8, sampler=sampler)
     # Check empirically statistics with weighted sampler

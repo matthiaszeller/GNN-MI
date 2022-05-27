@@ -249,7 +249,7 @@ class EGNN(GNNBase):
 
     def __init__(self, num_classes: int, num_hidden_dim: int, num_graph_features: int,
                  num_node_features: int = 0, num_equiv: int = 2, num_gin: int = 2,
-                 auxiliary_task: bool = False,
+                 auxiliary_task: bool = False, auxiliary_nodewise: bool = False,
                  min_pooler: bool = False, norm_pooler: bool = False):
         """
         @param num_classes: see BaseGNN
@@ -262,6 +262,7 @@ class EGNN(GNNBase):
 
         assert self.num_equiv > 0
         self.auxiliary_task = auxiliary_task
+        self.auxiliary_nodewise = auxiliary_nodewise
 
         self.equiv = nn.Sequential('h, edge_index, coord',
                                    [
@@ -294,7 +295,10 @@ class EGNN(GNNBase):
         self.classifier = Classifier(self.pooler.output_dim + self.num_graph_features,
                                      self.num_hidden_dim, self.num_classes)
         if self.auxiliary_task:
-            self.regressor = Regressor(self.pooler.output_dim + self.num_graph_features, self.num_hidden_dim)
+            if self.auxiliary_nodewise:
+                self.regressor = Regressor(self.num_hidden_dim, 1)
+            else:
+                self.regressor = Regressor(self.pooler.output_dim + self.num_graph_features, self.num_hidden_dim)
 
     def forward(self, h0, coord0, g0, edge_index, batch):
         """See GNNBase for arguments description."""
@@ -311,14 +315,19 @@ class EGNN(GNNBase):
             h_gin = torch.concat((h, delta_coord), dim=-1)
             h, _ = self.gin_layers(h_gin, edge_index)
 
+        if self.auxiliary_task and self.auxiliary_nodewise:
+            x_node_aux = self.regressor(h)
+
         # Graph pooling operations
         p = self.pooler(h, batch)
 
         # Build classifier input: concatenated pooled vectors + graph features
         x = torch.cat((p, g0), dim=1)
 
-        if self.auxiliary_task:
+        if self.auxiliary_task and not self.auxiliary_nodewise:
             x = self.classifier(x), self.regressor(x)
+        elif self.auxiliary_task and self.auxiliary_nodewise:
+            x = self.classifier(x), x_node_aux
         else:
             x = self.classifier(x)
         return x

@@ -13,6 +13,46 @@ import setup
 from datasets import PatientDataset
 from models import EGNN, GNNBase, checkpoint_model, GIN_GNN, Mastered_EGCL, EGNNMastered
 from utils import get_model_num_params
+from torch_scatter import scatter_mean
+
+
+# class MSELoss(torch.nn.Module):
+#     def __init__(self, nodewise_loss: bool = False):
+#         super(MSELoss, self).__init__()
+#         self.nodewise = nodewise_loss
+#
+#     def forward(self, yhat: torch.Tensor, ytrue: torch.Tensor, batch: torch.Tensor) -> torch.Tensor:
+#         # Row-wise squared differences
+#         diff = ((yhat - ytrue) ** 2).sum(-1)
+#         if not self.nodewise:
+#             return diff.mean()
+#
+#         # Batch-wise mean
+#         mses = scatter_mean(diff, batch)
+#         return mses
+
+
+def process_y_batch_auxiliary(y: torch.Tensor, batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    y, y_aux = y[:, 0], y[:, 1:]
+
+    batch_unique = torch.unique(batch)
+    batch_size = len(batch_unique)
+
+    if batch_size != y.shape[-1]:
+        # Main task
+        y_main = []
+        for b in batch_unique:
+            mask = batch == b
+            y_sample = y[mask]
+            assert len(torch.unique(y_sample)) == 1
+            y_main.append(y_sample[0])
+        y_main = torch.tensor(y_main, device=y.device)
+    else:
+        y_main = y
+
+    # Aux task
+    return y_main, y_aux
+
 
 
 class GNN:
@@ -26,18 +66,13 @@ class GNN:
         - instantiate model and move to device
         - instantiate optimizer
         - instantiate criterion
+
+    For auxiliary learning, the following structure was chosen:
+        - graph-level prediction: the y tensor (labels) for 1 sample has shape 1 x (1 + num_aux_features)
+          the +1 accounts for the main task label
+        - node-level prediction: the y tensor for 1 sample has shape n_nodes x (1 + num_aux_features)
+          the +1 accounts for the main task label, duplicated n_nodes times (just easier implementation)
     """
-
-    # TODO: Add a model "EquivWSS" which is exactly like "Equiv", but
-    # which uses the WSS scalars as invariant features h.
-
-    # TODO: Reimplement the models that includes Physics
-    # (i.e. loss term at node level) from Yunshu's project
-    # (https://github.com/yooyoo9/MI-detection), and combine that
-    # to the Equivariant framework. Note that this is different than,
-    # EquivWSS, as the latter does not do any prediction at the node level.
-    # Good luck! :)
-
     model: GNNBase
 
     def __init__(
@@ -70,11 +105,15 @@ class GNN:
         self.ratio = 1.0  # only useful for phys models
 
         self.auxiliary_task = config.get('model.aux_task', False)
+        self.auxiliary_task_nodewise = False
         if self.auxiliary_task:
             self.aux_loss_weight = config['model.aux_loss_weight']
             # Sanity check
             if isinstance(train_set[0].y, int) or train_set[0].y.shape[-1] == 1:
                 raise ValueError('auxiliary learning mode but y has size 1')
+            # Is the aux task node wise or graph wise ?
+            if train_set[0].y.shape[0] > 1:
+                self.auxiliary_task_nodewise = True
         else:
             self.aux_loss_weight = 0.0
 
@@ -92,7 +131,8 @@ class GNN:
                               num_node_features=train_set.num_node_features,
                               num_equiv=config['num_equiv'],
                               num_gin=config['num_gin'],
-                              auxiliary_task=self.auxiliary_task)
+                              auxiliary_task=self.auxiliary_task,
+                              auxiliary_nodewise=self.auxiliary_task_nodewise)
         elif self.model_type == 'EquivMastered':
             self.physics = False
             self.automatic_update = False
@@ -146,7 +186,8 @@ class GNN:
 
         self.criterion = torch.nn.CrossEntropyLoss(weight=weights).to(self.device)
         if self.auxiliary_task:
-            self.aux_criterion = torch.nn.MSELoss().to(self.device)
+            self.aux_criterion = torch.nn.MSELoss().to(self.device)#MSELoss(nodewise_loss=self.auxiliary_task_nodewise).to(self.device)
+
         self.epoch = None
 
         # --- Data standardization
@@ -225,20 +266,31 @@ class GNN:
             for i in range(len(dataset)):
                 sample = dataset.get(i)
                 y = sample.y
-                if isinstance(y, torch.Tensor):
-                    y = y.squeeze()
                 if self.auxiliary_task:
-                    y, y_aux = y[0], y[1:]
+                    if self.auxiliary_task_nodewise:
+                        y_aux = y[:, 1:]
+                        y = torch.unique(y[:, 0])
+                    else:
+                        y = y.squeeze()
+                        y, y_aux = y[0], y[1:]
                 else:
+                    y = y.squeeze()
                     y_aux = np.nan
+
+                if isinstance(y, torch.Tensor):
+                    y = y.item()
+                if y_aux.ndim == 2:
+                    y_aux = y_aux.tolist()
+                else:
+                    y_aux = y_aux.item()
                 output.append({
                     'file': dataset.patients[i],
                     'type': dataset.train,
                     'g_x': sample.g_x.tolist(),
                     'pred': preds[i].tolist(),
                     'pred_aux': preds_aux[i].item() if self.auxiliary_task else np.nan,
-                    'y': y.item() if isinstance(y, torch.Tensor) else y,
-                    'y_aux': y_aux.item() if isinstance(y_aux, torch.Tensor) else y_aux
+                    'y': y,
+                    'y_aux': y_aux
                 })
 
             return output
@@ -292,7 +344,14 @@ class GNN:
 
         if self.auxiliary_task:
             yhat, y_regr_hat = self.model(data.x, data.coord, data.g_x, data.edge_index, data.batch)
-            y, y_regr = data.y[:, 0], data.y[:, 1:]
+
+            y, y_regr = process_y_batch_auxiliary(data.y, data.batch)
+            # y, y_regr = data.y[:, 0], data.y[:, 1:]
+            # # Check if node-level or graph-level auxiliary task
+            # if data.y.shape[0] != self.train_loader.batch_size:
+            #     # Then the main label is duplicated for each node
+            #
+
             # Need to convert y back to int
             y = y.to(torch.long)
             loss = self.criterion(yhat, y)
@@ -491,9 +550,9 @@ if __name__ == '__main__':
         return data.mean(dim=0), data.std(dim=0)
 
     run = wandb.init(**setup.WANDB_SETTINGS, group='trash', job_type='trash')
-    gnn.save_predictions(run)
     metrics = gnn.train(1, 1000, 1000, run=run)
     mtest = gnn.evaluate(False, run)
+    gnn.save_predictions(run)
     a=0 # for breakpoint
 
     #run = wandb.init(**setup.WANDB_SETTINGS, job_type='trash', group='trash')

@@ -170,7 +170,8 @@ class GNN:
             train_sampler = None
 
         train_shuffle = True if train_sampler is None else None
-        self.train_loader = DataLoader(train_set, config['batch_size'], shuffle=train_shuffle, sampler=train_sampler)
+        self.train_loader = DataLoader(train_set, config['batch_size'], shuffle=train_shuffle,
+                                       sampler=train_sampler, drop_last=True)
         self.val_loader = DataLoader(valid_set, config['batch_size'], shuffle=False)
         self.test_loader = DataLoader(test_set, config['batch_size'], shuffle=False) if test_set is not None else None
 

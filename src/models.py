@@ -296,7 +296,7 @@ class EGNN(GNNBase):
                                      self.num_hidden_dim, self.num_classes)
         if self.auxiliary_task:
             if self.auxiliary_nodewise:
-                self.regressor = Regressor(self.num_hidden_dim, 1)
+                self.regressor = Regressor(self.num_hidden_dim, self.num_hidden_dim)
             else:
                 self.regressor = Regressor(self.pooler.output_dim + self.num_graph_features, self.num_hidden_dim)
 

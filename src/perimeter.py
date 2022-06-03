@@ -67,13 +67,9 @@ def parse_perimeter_data(json_file: Union[str, Path]) -> Dict[str, Any]:
 
 def parse_perimeter_data_nodewise(json_file: Union[str, Path]) -> torch.Tensor:
     """Return a tensor of node perimeter."""
-    paths = parse_perimeter_data(json_file)['perimeters']
-    perimeters = []
-    for path, path_length in paths:
-        start_node = path[0]
-        perimeters.append((start_node, path_length))
+    perims = parse_perimeter_data(json_file)['perimeters']
     # Order w.r.t. node ids
-    sorted_perim = sorted(perimeters, key=lambda e: e[0])
+    sorted_perim = sorted(perims.items(), key=lambda e: e[0])
     # Extract perimeters in the right order
     perimeters = torch.tensor([
         e[1] for e in sorted_perim

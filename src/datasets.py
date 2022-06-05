@@ -10,12 +10,44 @@ from typing import Union, List, Tuple
 
 import numpy as np
 import torch
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split, KFold, ShuffleSplit
 from torch.utils.data import WeightedRandomSampler
 from torch_geometric.data import Dataset as TorchDataset
 
 import setup
 from create_data import parse_data_file_name, load_patient_dict
+
+
+def shuffle_split_data(path, num_node_features, seed, n_split=100, valid_ratio=0.3, **kwargs):
+    # (this ensures/facilitates that we don'T train on
+    # augmented data from valid/test set.)
+    patient_dict = load_patient_dict()
+    patients = np.array(list(patient_dict.keys()))  # names of patients
+    patients = np.sort(patients)  # Safety, for seed to make sense
+
+    # first isolate 10% of data for test set:
+    pretrain_patients, test_patients = train_test_split(patients,
+                                                        test_size=0.1,
+                                                        shuffle=True,
+                                                        random_state=seed)
+
+    test_set = PatientDataset(path,
+                              test_patients,
+                              train='test',
+                              num_node_features=num_node_features,
+                              **kwargs)
+
+    splitter = ShuffleSplit(n_splits=n_split, test_size=valid_ratio, random_state=seed)
+    # Generator of PatientDatasets, avoid loading everything into memory at once
+    gen_splits = (
+        (
+            PatientDataset(path, pretrain_patients[train_patients_idx], train='train', num_node_features=num_node_features, **kwargs),
+            PatientDataset(path, pretrain_patients[val_patients_idx], train='val', num_node_features=num_node_features, **kwargs)
+        )
+        for train_patients_idx, val_patients_idx in splitter.split(pretrain_patients)
+    )
+
+    return test_set, gen_splits
 
 
 def split_data(path, num_node_features, seed, cv=False, k_cross=10, valid_ratio=0.3, **kwargs):
@@ -31,9 +63,10 @@ def split_data(path, num_node_features, seed, cv=False, k_cross=10, valid_ratio=
     num_node_features : int indicating how many features each node has
     cv : bool to indicate if cross validation is performed
     k_cross : int, which indicates the number of folds in the k-fold
-              if cv above is False, this does not impact the code
+              if cv above is False, this parameter is ignored
     seed : int, controls random state. Ensuring same train val and
            test split across experiments
+    valid_ratio: float, proportion of the validation set. Requires cv to be True
     kwargs: passed to PatientDataset
     """
     # (this ensures/facilitates that we don'T train on

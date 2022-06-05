@@ -13,7 +13,7 @@ import yaml
 
 import setup
 import utils
-from datasets import split_data
+from datasets import split_data, shuffle_split_data
 from train import GNN
 
 
@@ -41,10 +41,19 @@ else:
     for run_id in args.run_id:
         config = utils.get_run_config(run_id)
 
-        if 'cv.k_fold' not in config or \
-           not isinstance(config['cv.k_fold'], int):
-            logging.info('setting default value for cv.k_fold!')
-            config['cv.k_fold'] = setup.CONFIG_DEFAULT_K_FOLD
+        # Determine whether KFold or MC CV
+        kfold = config.get('cv.kfold', None)
+        mc = config.get('cv.mc_splits', None)
+        if isinstance(kfold, int) and isinstance(mc, int):
+            raise ValueError('cannot specify both KfoldCV and Monte-Carlo CV')
+        elif (kfold is None) and (mc is None):
+            raise ValueError('must specify one of the field `cv.kfold` xor `cv.mc_splits`')
+
+        if mc is None:
+            if 'cv.k_fold' not in config or \
+               not isinstance(config['cv.k_fold'], int):
+                logging.info('setting default value for cv.k_fold!')
+                config['cv.k_fold'] = setup.CONFIG_DEFAULT_K_FOLD
 
         desc = utils.display_json_config(config)
         logging.info(f'got config from run:\n{desc}')
@@ -62,15 +71,32 @@ for config in configs:
     logging.info(f'running config: \n{utils.display_json_config(config)}')
 
     # --- Data splitting
-    test_set, split_list = split_data(
-        path=setup.get_dataset_path(config['dataset.name']),
-        num_node_features=config['dataset.num_node_features'],
-        seed=config['cv.seed'],
-        cv=True,
-        k_cross=config['cv.k_fold'],
-        in_memory=config['dataset.in_memory'],
-        node_feat_transform=config.get('dataset.node_feat.transform')
-    )
+    if config['cv.k_fold'] is not None:
+        logging.info('Cross validation mode: KFOLD')
+
+        test_set, split_list = split_data(
+            path=setup.get_dataset_path(config['dataset.name']),
+            num_node_features=config['dataset.num_node_features'],
+            seed=config['cv.seed'],
+            cv=True,
+            k_cross=config['cv.k_fold'],
+            in_memory=config['dataset.in_memory'],
+            node_feat_transform=config.get('dataset.node_feat.transform')
+        )
+        n_splits = config['cv.k_fold']
+    else:
+        logging.info('Cross validation mode: MONTE CARLO')
+
+        test_set, split_list = shuffle_split_data(
+            path=setup.get_dataset_path(config['dataset.name']),
+            num_node_features=config['dataset.num_node_features'],
+            seed=config['cv.seed'],
+            n_split=config['cv.mc_splits'],
+            # Args for PatientDataset
+            in_memory=config['dataset.in_memory'],
+            exclude_files=config.get('dataset.exclude_files')
+        )
+        n_splits = config['cv.mc_splits']
 
     for i, (train_set, val_set) in enumerate(split_list):
         run = wandb.init(**setup.WANDB_SETTINGS,
@@ -81,7 +107,7 @@ for config in configs:
                          config=config,
                          tags=[job_type])
 
-        logging.info(f'Test model fold {i+1}/{config["cv.k_fold"]}')
+        logging.info(f'Test model fold {i+1}/{n_splits}')
         logging.info(f'training set, length {len(train_set)}, {train_set.patients}')
         logging.info(f'validation set, length {len(val_set)}, {val_set.patients}')
         logging.info(f'test set, length {len(test_set)}, {test_set.patients}')

@@ -267,6 +267,7 @@ class GNN:
             for i in range(len(dataset)):
                 sample = dataset.get(i)
                 y = sample.y
+                # TODO: this thing is a huge mess
                 if self.auxiliary_task:
                     if self.auxiliary_task_nodewise:
                         y_aux = y[:, 1:]
@@ -275,7 +276,8 @@ class GNN:
                         y = y.squeeze()
                         y, y_aux = y[0], y[1:]
                 else:
-                    y = y.squeeze()
+                    if isinstance(y, torch.Tensor):
+                        y = y.squeeze()
                     y_aux = np.nan
 
                 if isinstance(y, torch.Tensor):

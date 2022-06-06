@@ -278,7 +278,7 @@ class GNN:
                 else:
                     if isinstance(y, torch.Tensor):
                         y = y.squeeze()
-                    y_aux = np.nan
+                    y_aux = torch.Tensor([np.nan])
 
                 if isinstance(y, torch.Tensor):
                     y = y.item()

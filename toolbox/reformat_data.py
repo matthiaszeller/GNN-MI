@@ -48,6 +48,16 @@ def add_target(features: Data, feat2label: Data):
     return out
 
 
+def concat_features(data1: Data, data2: Data) -> Data:
+    out = data1.clone()
+    xconcat = data2.x.clone()
+    if xconcat.ndim == 1:
+        xconcat = xconcat.reshape(-1, 1)
+
+    out.x = torch.concat((out.x, xconcat), dim=1)
+    return out
+
+
 def dataset_apply(fun_apply: Callable, path_in: Union[str, Path],
                   path_out: Union[str, Path], path_in2: Union[str, Path] = None):
     """

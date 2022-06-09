@@ -1,0 +1,33 @@
+\begin{tikzpicture}
+	\begin{pgfonlayer}{nodelayer}
+		\node [style=small text] (0) at (0, 0) {\begin{tabular}{l} $X_{N \times D} $ \\ $C_{N \times 3}$ \end{tabular}};
+		\node [style=basic rec] (1) at (4, 0) {GCLs};
+		\node [style=small text] (2) at (8, 0) {$H_{N \times D_h}$};
+		\node [style=basic rec] (3) at (12, 0) {Pooling};
+		\node [style=small text] (5) at (15.5, 0) {$\mathbf z$};
+		\node [style=basic rec] (6) at (21, 0) {Classifier};
+		\node [style=small text] (9) at (15.5, 2.5) {$\mathbf x_{\mathcal G}$};
+		\node [style=small text] (11) at (24, 0) {$\hat p$};
+		\node [style=small dot] (12) at (15.5, 1.25) {};
+		\node [style=small dot] (13) at (18.5, 1.25) {};
+		\node [style=none] (14) at (18.5, 0) {};
+		\node [style=none] (15) at (18.5, 2.5) {};
+		\node [style=basic rec] (16) at (21, 2.5) {Regressor};
+		\node [style=small text] (17) at (24.25, 2.5) {$\widehat{Tsvi}$};
+	\end{pgfonlayer}
+	\begin{pgfonlayer}{edgelayer}
+		\draw [style=simple arrow] (0) to (1);
+		\draw [style=simple arrow] (1) to (2);
+		\draw [style=simple arrow] (2) to (3);
+		\draw [style=simple arrow] (3) to (5);
+		\draw [style=simple arrow] (6) to (11);
+		\draw (9) to (12);
+		\draw (12) to (5);
+		\draw (12) to (13);
+		\draw (15.center) to (13);
+		\draw (13) to (14.center);
+		\draw [style=simple arrow] (14.center) to (6);
+		\draw [style=simple arrow] (15.center) to (16);
+		\draw [style=simple arrow] (16) to (17);
+	\end{pgfonlayer}
+\end{tikzpicture}

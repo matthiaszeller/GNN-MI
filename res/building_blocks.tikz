@@ -1,0 +1,35 @@
+\begin{tikzpicture}
+	\begin{pgfonlayer}{nodelayer}
+		\node [style=small text] (0) at (-11, 0.5) {Features};
+		\node [style=small text] (2) at (-11, -0.5) {Graph connectivity};
+		\node [style=basic rec] (3) at (-5, 0) {EGCLs};
+		\node [style=none] (4) at (-8.5, 0) {};
+		\node [style=basic rec] (5) at (0, 0) {GIN layers};
+		\node [style=basic rec] (7) at (6, 0) {Pooling layer};
+		\node [style=basic rec] (9) at (6, 1.5) {Regressor};
+		\node [style=none] (10) at (2.75, 1.5) {};
+		\node [style=small dot] (13) at (2.75, 0) {};
+		\node [style=basic rec] (14) at (11.5, 0) {Classifier};
+		\node [style=basic rec] (15) at (11.5, -1.5) {Regressor};
+		\node [style=small dot] (16) at (9, 0) {};
+		\node [style=none] (17) at (9, -1.5) {};
+		\node [style=small text] (18) at (15.25, 1.5) {$\mathcal L_{aux,node}$};
+		\node [style=small text] (19) at (15, 0) {$\mathcal L_{main}$};
+		\node [style=small text] (20) at (15.25, -1.5) {$\mathcal L_{aux,graph}$};
+	\end{pgfonlayer}
+	\begin{pgfonlayer}{edgelayer}
+		\draw [style=simple arrow] (4.center) to (3);
+		\draw [style=simple arrow] (3) to (5);
+		\draw [style=simple arrow] (10.center) to (9);
+		\draw [style=simple arrow] (13) to (7);
+		\draw (10.center) to (13);
+		\draw (13) to (5);
+		\draw (7) to (16);
+		\draw (16) to (17.center);
+		\draw [style=simple arrow] (17.center) to (15);
+		\draw [style=simple arrow] (16) to (14);
+		\draw [style=simple arrow] (9) to (18);
+		\draw [style=simple arrow] (14) to (19);
+		\draw [style=simple arrow] (15) to (20);
+	\end{pgfonlayer}
+\end{tikzpicture}

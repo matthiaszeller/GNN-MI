@@ -9,6 +9,10 @@
 \tikzstyle{small text}=[shape=circle, font={\small}, scale=0.75]
 \tikzstyle{vertical text}=[rotate=90]
 \tikzstyle{vertical mirror}=[rotate=-90]
+\tikzstyle{small dot 2}=[fill=blue, draw=blue, shape=circle, scale=0.25]
+\tikzstyle{small dot 3}=[fill=white, draw=blue, shape=circle, scale=0.25]
+\tikzstyle{small dot 4}=[fill=white, draw=black, shape=circle, scale=0.25]
+\tikzstyle{big text}=[shape=circle, scale=1.15]
 
 % Edge styles
 \tikzstyle{simple arrow}=[->]

@@ -11,24 +11,33 @@ Forked from https://github.com/jacobbamberger/MI-proj.
 ## Getting started
 
 1. Create the conda environment from `environment.yml`
-2. Mount the "source" data folder, i.e. the folder provided by the lab
+2. Mount the "source" data folder, i.e. the folder `lts4-cardio/` provided by the lab
 3. Create a data folder that will store the datasets
 4. Put the folder locations of the two previous steps in `src/data-path.txt`, see the "Path management" section below
 5. Create the datasets with `src/create_data.py`, see the "Data" section below 
 
 You're now ready to train models!
-One must now specify the configuration in one of the `yaml` file in the `config` folder. 
-One can run models in three ways as described below.
+One must now specify the configuration in a `json` or `yaml` file in the `config` folder,
+see the "Configuration" section below. 
+One can run models in three ways as described in the following section.
 
-### Train single model
+### Train/test single model
 
-* Script `src/run_kfold.py`: run k-fold cross validation for a specific model
+#### Without test metrics
+
+* Script `src/run_cv.py`: run cross validation for a specific model
 * The template configuration are 
-`config/config*.yaml`, the parameters `cv.seed` and `cv.k_fold` must be specified
+`config/config*.yaml`, the parameters `cv.seed` and either `cv.k_fold` xor `cv.mc_splits` must be specified
 * Example (use `--help` argument to see the script arguments):
 ```shell
 python src/run_kfold.py config/config.yaml <name_of_wandb_job_type>
 ```
+
+#### With test metrics
+
+* Script `src/run_test.py`: run k-fold cross validation for a specific model and evaluate each of the k
+trained models on the test set
+* Specify either a configuration file, or a wandb run id (the same config will be used)
 
 ### Hyperparameter tuning
 
@@ -63,40 +72,61 @@ See a template configuration file in `config/sweep_kfold*.yaml`.
 The agent will eventually call `src/run_sweep_kfold.py`.
 
 
-## Logging
+## Project Configuration
 
-All scripts perform extensive logging to track all operations and ease debugging.
-The logging is performed both on the stdout (i.e. on terminal) and in a file `logs.log`.
+### Model Configuration
 
-Logging is setup in the `src/setup.py` file. The only option that a user might want to control is the logging level
-(`INFO` or `DEBUG` are recommended), especially because `DEBUG` might get very verbose. This is done by changing the `level` argument of this part:
-```python
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs.log"),
-        logging.StreamHandler()
-    ]
-)
-```
+Each model is based either on `models.EGNN` or `models.GIN` class. 
+The architectures (number of layers, number of hidden dimensions, auxiliary learning, etc...)
+are dynamically generated based on the configuration parameters.
 
-## Path management
+Below is the detailed explanation of each parameter.  Looking at template configurations in `config` folder 
+is probably more useful, especially for sweep configurations.
 
-In the code, the data paths are retrieved with the function `get_data_path()` from `src.setup`.
-The repo is designed so that two workflows are possible:
-1. Execute code from local repository, the folders containing the data are mounted from a network path 
-  (e.g. `//sti1files.epfl.ch/cardio-project` `//filesX.epfl.ch/data/<my-gaspar>`)
-2. Execute code in remote directory
+* Training:
+  * `allow_stop`, `early_stop`: for early stopping
+  * `batch_size`
+  * `epochs`
+* Cross validation:
+  * `cv.fold_id`: only used for "fine" hyperparameter tuning
+  * `cv.valid_ratio`: for "coarse" hyperparameter tuning
+  * `cv.k_fold`: number of folds for Kfold-CV
+  * `cv.seed`: seed for random data splitting
+  * `cv.test_reps`: deprecated
+* Data:
+  * `dataset.in_memory`: let it True, False is not implemented
+  * `dataset.name`: to find the path of the dataset
+  * `dataset.node_feat.transform`: either None or `fourier`
+  * `dataset.num_graph_features`: should be 3
+  * `dataset.num_node_features`: either 0 (coordinates only), 1 (e.g. perimeter of Tsvi) or 30 (Wss)
+  * `dataset.sampler`: 
+  * `dataset.standardize`: either None, `normalize` or `standardize`
+* Model:
+  * `model.desc`: textual description
+  * `model.name`
+  * `model.type`: either `Equiv`, `GIN`
+  * `num_equiv`: number of equivariant layers, ignored for GIN model
+  * `num_gin`: number of GIN layers
+  * `num_hidden_dim`: number of hidden dimensions
+  * `model.aux_task`: true or false
+  * `model.aux_loss_weight`: float multiplying the auxiliary loss
+* Loss & auxiliary loss:
+  * `loss.weight`: loss weight for imbalanced classes
+* Optimizer:
+  * `optimizer.lr`: learning rate
+  * `optimizer.momentum`
+  * `optimizer.name`: should be `Adam`
 
-The reason is that debugging is much more convenient to perform locally, but it's more efficient to eventually 
-run the code remotely (e.g. from the cluster).
+### Path Management
 
-Option (2) assumes that the repository is cloned in the remote directory and that the repo contains a `data` folder at the 
-root of the project. Option (1) requires to add a file `data-path.txt` in `src` that contains the data locations 
-(see docstring of `setup.get_data_paths()`).
+In the code, the data paths are retrieved with the functions `get_data_path()` and `get_dataset_path()` 
+from `src.setup`. 
+This greatly eases path management and debugging. 
 
-For both option (1) and (2), the structure of the data folder is assumed to be:
+Path management relies on the file `src/data-path.txt`: it contains two lines, the
+"source" data folder (containing raw data provided by the lab) and the local folder containing generated datasets.
+
+The source data folder is assumed to point to a root with the following hierarchy:
 ```
 .
 ├── CFD
@@ -118,7 +148,8 @@ For both option (1) and (2), the structure of the data folder is assumed to be:
 
 ### Data description
 
-The first sample is from the `CoordToCnc` dataset, the second is the same sample but from `WssToCnc`:
+All models are based on the [`torch_geometric.data.Data`](https://pytorch-geometric.readthedocs.io/en/latest/modules/data.html#torch_geometric.data.Data)
+object. Here's an example of a sample from the `CoordToCnc` and `WssToCnc` datasets:
 
 ```
 Data(x=[3478, 0], edge_index=[2, 20766], y=0, coord=[3478, 3], g_x=1)
@@ -133,75 +164,90 @@ Attributes are:
 * `g_x`: graph features
 
 
-### Data creation
+### Dataset generation
 
-With current working directory (cwd) being the root of this repo, run 
+Creating a dataset starts with the script `src/create_data.py`. 
+This requires to set up the paths a priori (see Path management section). 
+
+Example of the help output of `create_data.py`:
 ```shell
-python src/create_data.py
-```
+(gnn) root@pyt:/workspace/mynas/GNN-MI/src# python create_data.py -h
+usage: create_data.py [-h]
+                      [-n {CoordToCnc,WssToCnc,TsviToCnc,CoordToCnc+Tsvi}]
+                      [-k AUGMENT_DATA] [-s DATA_SOURCE] [-l LABELS_SOURCE]
 
-One can provide several arguments, e.g. the type of dataset to generate and the paths to data sources. 
-Note that by default, path to data sources are automatically inferred from `get_path_data()` 
-(see path management section above).
+optional arguments:
+  -h, --help            show this help message and exit
+  -n {CoordToCnc,WssToCnc,TsviToCnc,CoordToCnc+Tsvi}, --dataset_name {CoordToCnc,WssToCnc,TsviToCnc,CoordToCnc+Tsvi}
+                        name of dataset to be created
+  -k AUGMENT_DATA, --augment_data AUGMENT_DATA
+                        number of neighbours used for KNN
+  -s DATA_SOURCE, --data_source DATA_SOURCE
+                        path to raw data
+  -l LABELS_SOURCE, --labels_source LABELS_SOURCE
+                        path to data label
+```
+By default, `DATA_SOURCE` and `LABELS_SOURCE` do not need to be specified.
+
+All models are based on variations of `CoordToCnc`, `WssToCnc`, `TsviToCnc`, `CoordToCnc+Tsvi`.
+Specifically, datasets for auxiliary tasks require some post-processing. 
+All routines are either in `src/data_augmentation.py` or `toolbox/reformat_data.py`.
 
 
 #### Example workflow for perimeter computation
 
-Use the function `data_augmentation.compute_dataset_perimeter` to create a new folder with shortest path data.
+Use the function `data_augmentation.compute_dataset_perimeter` to create a new folder with shortest path data,
+this produces a set of `.json` files. 
+
 Example:
 ```python
-compute_dataset_perimeter('CoordToCnc', 'perimeter')
+from data_augmentation import compute_dataset_perimeter
+from setup import get_dataset_path
+
+path_in = get_dataset_path('CoordToCnc')
+path_out = get_dataset_path('perimeter')
+compute_dataset_perimeter(path_in, path_out)
 ```
 
 Then augment a dataset with perimeter features:
 ```python
+from data_augmentation import create_dataset_with_perimeter
+from setup import get_dataset_path
 
+path_in = get_dataset_path('CoordToCnc')
+path_perim = get_dataset_path('perimeter')
+path_out = get_dataset_path('CoordToCnc_perimeter')
+create_dataset_with_perimeter(path_in, path_perim, path_out)
 ```
 
-#### Example workflow for KNN data augmentation
+## Logging
 
-Create the dataset with both KNN and rotation augmentation once, then manually create two datasets out of it.
+All scripts perform extensive logging to track all operations and ease debugging.
+The logging is performed both on the stdout (i.e. on terminal) and in a file `logs.log`.
 
-For instance, create the dataset `CoordToCnc`:
-
-```shell
-python src/create_data.py -n CoordToCnc -k 5
+Logging is setup in the `src/setup.py` file. The only option that a user might want to control is the logging level
+(`INFO` or `DEBUG` are recommended), especially because `DEBUG` might get very verbose. This is done by changing the `level` argument of this part:
+```python
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("logs.log"),
+        logging.StreamHandler()
+    ]
+)
 ```
 
-Then the output directory will contain 6 versions of each data point, for instance:
-* `OLV049_LAD.pt`
-* `OLV049_LAD_KNN5.pt`
-* `OLV049_LAD_rot-18.pt`
-* `OLV049_LAD_rot-09.pt`
-* `OLV049_LAD_rot009.pt`
-* `OLV049_LAD_rot018.pt`
-
-Now, split this dataset into two: `CoordToCnc_KNN5` and `CoordToCnc_rot`. Follow this procedure:
-1. Rename
-    ```shell
-    mv CoordToCnc CoordToCnc_rot
-    ```
-2. Copy
-    ```shell
-    cp -r CoordToCnc_rot CoordToCnc_KNN5
-    ```
-3. Remove KNN files from rotation dataset:
-    ```shell
-    cd CoordToCnc_rot
-    rm -v *_KNN5*
-    ```
-4. Remove rot files from KNN dataset:
-    ```shell
-    cd ../CoordToCnc_KNN5
-    rm -v *_rot*
-    ```
 
 ## Debugging
 
-Some scripts have tests in their `if __name__ == '__main__'` section. Make sure to run and understand those.
+Some scripts have tests in their `if __name__ == '__main__'` section. 
+Make sure to run and understand those (might require to change some paths).
 Specifically, the most useful for model debugging is to 
 copy locally a sample (or a few samples from different datasets) and run `models.py` in a debugger. 
 For instance, in Pycharm, open the `models.py`, right click on any part of the code and click "Debug models". 
 If anything goes wrong, the debugger will bring you to the problematic line and you can play in the interpreter with all
- local variables to check the shapes, etc...
+local variables to check the shapes, etc...
 
+As a sidenote, if one wishes to run some scripts that need a wandb run instance, 
+you may want to enable offline mode by running a session with the environment variable `WANDB_MODE=offline`.

@@ -1,4 +1,4 @@
-description: "CoordToCnc with perimeter"
+description: "GIN with perimeters without coordinates"
 method: grid
 parameters:
   allow_stop:
@@ -44,17 +44,21 @@ parameters:
   model.name:
     value: EGNN
   model.type:
-    value: Equiv
+    value: "GIN"
+  model.use_coords:
+    value: false
   num_equiv:
     values:
     - 3
     - 5
   num_gin:
     values:
-      - 0
       - 1
+      - 3
+      - 5
   num_hidden_dim:
     values:
+    - 5
     - 8
   optimizer.lr:
     values:

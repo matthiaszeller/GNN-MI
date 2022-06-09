@@ -1,4 +1,4 @@
-description: "CoordToCnc with perimeter"
+description: "WssToPerim+Cnc"
 method: grid
 parameters:
   allow_stop:
@@ -21,21 +21,19 @@ parameters:
   dataset.in_memory:
     value: true
   dataset.name:
-    value: "CoordToCnc_perimeter"
+    value: "WssToPerim+Cnc"
   dataset.num_graph_features:
     value: 3
   dataset.num_node_features:
-    value: 1
+    value: 30
   dataset.standardize:
-    values:
-      - null
-      - "standardize"
+    value: 'normalize'
   early_stop:
     value: 1000
   epochs:
     values:
-    - 90
-    - 130
+    - 70
+    - 100
   loss.weight:
     values:
     - 0.57
@@ -45,6 +43,12 @@ parameters:
     value: EGNN
   model.type:
     value: Equiv
+  model.aux_task:
+    value: true
+  model.aux_loss_weight:
+    values:
+      - 2e-1
+      - 1e-3
   num_equiv:
     values:
     - 3
@@ -55,11 +59,11 @@ parameters:
       - 1
   num_hidden_dim:
     values:
+    - 5
     - 8
   optimizer.lr:
     values:
-    - 0.004
-    - 0.0008
+    - 1e-3
   optimizer.momentum:
     value: 0
   optimizer.name:

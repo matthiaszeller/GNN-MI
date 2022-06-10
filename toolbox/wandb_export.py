@@ -53,7 +53,7 @@ def unnest_dataframe(df: pd.DataFrame, preprend_col_name: bool = True) -> pd.Dat
             new_dfs[col] = unnest_dataframe(new_dfs[col], preprend_col_name=preprend_col_name)
 
     for col_to_remove, new_df in new_dfs.items():
-        logging.info(f'expanding column {col_to_remove}')
+        logging.debug(f'expanding column {col_to_remove}')
         out.drop(columns=col_to_remove, inplace=True)
         out = out.join(new_df)
 

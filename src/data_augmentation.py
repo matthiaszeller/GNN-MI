@@ -110,6 +110,10 @@ def add_edge_weights(data, inverse: bool = True):
 
 def create_dataset_with_perimeter(input_dset: Union[str, Path],
                                   perimeter_dset: Union[str, Path], output_dset: Union[str, Path]):
+    """
+    Create a torch dataset from perimeter data in json format (computed with compute_dataset_perimeter).
+    The resulting features are the concatenation of the features in `input_dset` and perimeters.
+    """
     input_dset, output_dset = Path(input_dset), Path(output_dset)
     perimeter_dset = Path(perimeter_dset)
     if not output_dset.exists():
@@ -140,7 +144,11 @@ def create_dataset_with_perimeter(input_dset: Union[str, Path],
 
 
 def compute_dataset_perimeter(input_path: Union[str, Path], output_path: Union[str, Path]):
-    """Compute perimeter at each node of all samples of a dataset in parallel."""
+    """
+    Compute perimeter at each node of all samples of a dataset.
+    The results is a set of json files, i.e. not torch samples.
+    Use `create_dataset_with_perimeter` to later create a torch dataset.
+    """
     input_path = Path(input_path)
     output_path = Path(output_path)
     if not output_path.exists():
@@ -435,12 +443,16 @@ def augment_dataset(
 
 
 if __name__ == '__main__':
+    path = setup.get_dataset_path('CoordToCnc+Tsvi')
+    perim = setup.get_dataset_path('perimeters')
+    create_dataset_with_perimeter(path, perim, path.parent.joinpath('PerimToTsvi+Cnc'))
 
-    path = setup.get_dataset_path('CoordToCnc_perimeters')
+    # path = setup.get_dataset_path('CoordToCnc_perimeters')
+    #
+    # create_dataset_graph_features('/media/maousi/Data/tmp/gnn-mi/CoordToCnc_perimeters',
+    #                               '/media/maousi/Data/tmp/gnn-mi/graph_features', [1,3,5,9])
+    # a = 0
 
-    create_dataset_graph_features('/media/maousi/Data/tmp/gnn-mi/CoordToCnc_perimeters',
-                                  '/media/maousi/Data/tmp/gnn-mi/graph_features', [1,3,5,9])
-    a = 0
     #create_dataset_graph_features(path, path.parent.joinpath('perimeters_graph_features'), tau_0=0.1, kmax=5)
 
     # path = setup.get_dataset_path('CoordToCnc')
